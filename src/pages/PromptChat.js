@@ -245,8 +245,12 @@ const PromptChat = () => {
   
   // Inicializar ou carregar conversa
   useEffect(() => {
+    console.log('Iniciando carregamento de conversa, ID:', id);
     const chatId = id || 'default';
     const conversation = conversationRef.current;
+    
+    // Limpar mensagens para evitar flash de conteúdo antigo
+    setMessages([]);
     
     // Se temos um ID específico, verificar se é um preset
     if (id && id !== 'default') {
@@ -254,7 +258,7 @@ const PromptChat = () => {
       try {
         const preset = presets.find(p => p.id === id);
         if (preset) {
-          console.log('Carregando preset:', preset.name);
+          console.log('Carregando preset:', preset.name, 'hasConversation:', preset.hasConversation);
           
           // Atualizar o preset atual
           setCurrentPreset(preset);
@@ -272,48 +276,67 @@ const PromptChat = () => {
           
           // Se o preset tem uma conversa salva
           if (preset.hasConversation) {
+            console.log('Tentando carregar conversa do preset:', chatId);
             const loaded = conversation.load(chatId);
             if (loaded) {
+              console.log('Conversa carregada com sucesso do preset');
               loadConversationToUI(conversation);
             } else {
+              console.warn('Falha ao carregar conversa do preset, iniciando nova conversa');
               // Inicializar nova conversa com o system prompt do preset
               conversation.reset(preset.systemPrompt || '');
             }
-            return;
           } else {
+            console.log('Preset sem conversa salva, iniciando nova conversa');
             // Inicializar nova conversa com o system prompt do preset
             conversation.reset(preset.systemPrompt || '');
           }
         } else {
+          console.log('ID não corresponde a nenhum preset, tentando carregar como conversa normal:', chatId);
           setCurrentPreset(null);
-          conversation.reset(systemPrompt);
+          
+          // Tentar carregar como conversa normal
+          const loaded = conversation.load(chatId);
+          if (loaded) {
+            console.log('Conversa normal carregada com sucesso');
+            loadConversationToUI(conversation);
+          } else {
+            console.warn('Falha ao carregar conversa normal, iniciando nova conversa');
+            conversation.reset(systemPrompt);
+          }
         }
       } catch (e) {
-        console.error('Error loading preset:', e);
+        console.error('Error loading preset or conversation:', e);
         setCurrentPreset(null);
         conversation.reset(systemPrompt);
       }
     } else {
       // Se estamos no chat padrão
+      console.log('Carregando chat padrão');
       setCurrentPreset(null);
       
       // Carregamento padrão se não for um preset ou se o preset não tiver conversa
       const loaded = conversation.load(chatId);
       
       if (loaded) {
+        console.log('Conversa padrão carregada com sucesso');
         loadConversationToUI(conversation);
       } else {
+        console.log('Iniciando nova conversa padrão');
         // Inicializar nova conversa com o system prompt
         conversation.reset(systemPrompt);
       }
     }
   }, [id, presets]);
   
-  // Efeito separado para atualizar o system prompt quando ele é alterado
+  // Estado para controlar quando o system prompt foi alterado manualmente
+  const [manualSystemPromptChange, setManualSystemPromptChange] = useState(false);
+  
+  // Efeito separado para atualizar o system prompt quando ele é alterado manualmente
   useEffect(() => {
-    // Só reinicia a conversa se já houver mensagens
-    if (messages.length > 0) {
-      console.log('Reiniciando conversa com novo system prompt');
+    // Só reinicia a conversa se houve alteração manual e já existem mensagens
+    if (manualSystemPromptChange && messages.length > 0) {
+      console.log('Reiniciando conversa com novo system prompt (alteração manual)');
       const conversation = conversationRef.current;
       conversation.reset(systemPrompt);
       setMessages([]);
@@ -322,8 +345,11 @@ const PromptChat = () => {
         open: true,
         message: 'Conversa reiniciada com o novo system prompt'
       });
+      
+      // Resetar flag após processar
+      setManualSystemPromptChange(false);
     }
-  }, [systemPrompt]);
+  }, [manualSystemPromptChange, messages.length, systemPrompt]);
   
   // Efeito para desativar ferramentas quando selecionar modelos GPT-4.1
   useEffect(() => {
@@ -764,6 +790,9 @@ const PromptChat = () => {
     const currentSystemPrompt = conversation.getHistory().find(msg => msg.role === 'system')?.content;
     
     if (currentSystemPrompt !== systemPrompt) {
+      // Marcar que houve uma alteração manual no system prompt
+      setManualSystemPromptChange(true);
+      
       // Reset da conversa com novo system prompt
       conversation.reset(systemPrompt);
       
