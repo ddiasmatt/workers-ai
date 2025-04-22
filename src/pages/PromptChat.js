@@ -1139,7 +1139,7 @@ const PromptChat = () => {
             <IconButton
               color="primary"
               onClick={handleOpenSettings}
-              sx={{ mr: 1, bgcolor: 'rgba(16, 163, 127, 0.1)' }}
+              sx={{ mr: 1 }}
             >
               <SettingsIcon fontSize="large" />
             </IconButton>
@@ -1149,7 +1149,7 @@ const PromptChat = () => {
             <IconButton
               color="secondary"
               onClick={handleOpenPresetManager}
-              sx={{ mr: 1, bgcolor: 'rgba(142, 68, 173, 0.1)' }}
+              sx={{ mr: 1 }}
             >
               <TuneIcon fontSize="large" />
             </IconButton>
