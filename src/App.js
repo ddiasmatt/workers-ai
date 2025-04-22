@@ -16,7 +16,7 @@ import PromptChat from './pages/PromptChat';
 // Tema personalizado
 const theme = createTheme({
   palette: {
-    mode: 'dark',
+    mode: 'light', // Alterado para light mode para melhor visibilidade
     primary: {
       main: '#10a37f',
     },
@@ -24,8 +24,8 @@ const theme = createTheme({
       main: '#8e44ad',
     },
     background: {
-      default: '#202123',
-      paper: '#343541',
+      default: '#f5f5f5',
+      paper: '#ffffff',
     },
   },
   typography: {

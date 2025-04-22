@@ -883,13 +883,32 @@ const PromptChat = () => {
       height: '100%', 
       display: 'flex', 
       flexDirection: 'column',
-      position: 'absolute',
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
-      bgcolor: 'background.default'
+      position: 'relative',
+      bgcolor: 'background.default',
+      border: '2px solid #10a37f',
+      borderRadius: 2,
+      overflow: 'hidden'
     }}>
+      {/* Banner de instruções */}
+      {!messages.length && (
+        <Box sx={{
+          bgcolor: 'secondary.light',
+          color: 'white',
+          p: 2,
+          textAlign: 'center',
+          fontSize: '1rem',
+          fontWeight: 'bold',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 1
+        }}>
+          <SettingsIcon /> Clique no ícone de engrenagem verde para configurar e criar presets
+          &nbsp;&nbsp;&nbsp;|&nbsp;&nbsp;&nbsp;
+          <TuneIcon /> Clique no ícone roxo para gerenciar seus presets salvos
+        </Box>
+      )}
+      
       {/* Cabeçalho */}
       <AppBar position="static" color="default" elevation={1}>
         <Toolbar>
@@ -915,21 +934,21 @@ const PromptChat = () => {
           
           <Tooltip title="Configurações do chat">
             <IconButton
-              color="inherit"
+              color="primary"
               onClick={handleOpenSettings}
-              sx={{ mr: 1 }}
+              sx={{ mr: 1, bgcolor: 'rgba(16, 163, 127, 0.1)' }}
             >
-              <SettingsIcon />
+              <SettingsIcon fontSize="large" />
             </IconButton>
           </Tooltip>
           
           <Tooltip title="Gerenciar presets">
             <IconButton
-              color="inherit"
+              color="secondary"
               onClick={handleOpenPresetManager}
-              sx={{ mr: 1 }}
+              sx={{ mr: 1, bgcolor: 'rgba(142, 68, 173, 0.1)' }}
             >
-              <TuneIcon />
+              <TuneIcon fontSize="large" />
             </IconButton>
           </Tooltip>
           
