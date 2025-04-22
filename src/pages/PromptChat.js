@@ -30,7 +30,15 @@ import {
   Select,
   MenuItem,
   FormControl,
-  InputLabel
+  InputLabel,
+  Card,
+  CardContent,
+  CardActions,
+  Slider,
+  Menu,
+  ListItemIcon,
+  Switch,
+  FormControlLabel
 } from '@mui/material';
 import SendIcon from '@mui/icons-material/Send';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
@@ -43,6 +51,11 @@ import TableChartIcon from '@mui/icons-material/TableChart';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import WarningIcon from '@mui/icons-material/Warning';
 import SettingsIcon from '@mui/icons-material/Settings';
+import TuneIcon from '@mui/icons-material/Tune';
+import SaveIcon from '@mui/icons-material/Save';
+import DeleteIcon from '@mui/icons-material/Delete';
+import EditIcon from '@mui/icons-material/Edit';
+import MoreVertIcon from '@mui/icons-material/MoreVert';
 import { 
   hasApiKey, 
   uploadFile,
@@ -53,9 +66,44 @@ import {
 
 // Modelos disponíveis
 const AVAILABLE_MODELS = [
-  { id: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo', description: 'Rápido e econômico' },
-  { id: 'gpt-4', name: 'GPT-4', description: 'Mais capaz e preciso' },
-  { id: 'gpt-4-turbo', name: 'GPT-4 Turbo', description: 'Versão mais recente e rápida do GPT-4' }
+  { id: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo', description: 'Rápido e econômico', contextWindow: 16385 },
+  { id: 'gpt-3.5-turbo-16k', name: 'GPT-3.5 Turbo 16K', description: 'Contexto ampliado', contextWindow: 16385 },
+  { id: 'gpt-4', name: 'GPT-4', description: 'Mais capaz e preciso', contextWindow: 8192 },
+  { id: 'gpt-4-32k', name: 'GPT-4 32K', description: 'GPT-4 com contexto ampliado', contextWindow: 32768 },
+  { id: 'gpt-4-turbo', name: 'GPT-4 Turbo', description: 'Versão mais recente e rápida do GPT-4', contextWindow: 128000 },
+  { id: 'gpt-4o', name: 'GPT-4o', description: 'Modelo mais avançado e otimizado', contextWindow: 128000 }
+];
+
+// Ferramentas disponíveis
+const AVAILABLE_TOOLS = [
+  { 
+    id: 'code_interpreter', 
+    name: 'Interpretador de Código', 
+    description: 'Executa código Python para análises e cálculos',
+    type: 'code_interpreter',
+    models: ['gpt-4', 'gpt-4-turbo', 'gpt-4-32k', 'gpt-4o'] 
+  },
+  { 
+    id: 'retrieval', 
+    name: 'Recuperação de Conhecimento', 
+    description: 'Pesquisa informações em arquivos anexados',
+    type: 'retrieval',
+    models: ['gpt-3.5-turbo', 'gpt-3.5-turbo-16k', 'gpt-4', 'gpt-4-turbo', 'gpt-4-32k', 'gpt-4o'] 
+  },
+  { 
+    id: 'web_browsing', 
+    name: 'Navegação Web', 
+    description: 'Acessa e resume conteúdo da web',
+    type: 'web_browsing',
+    models: ['gpt-4', 'gpt-4-turbo', 'gpt-4-32k', 'gpt-4o'] 
+  },
+  { 
+    id: 'function_calling', 
+    name: 'Chamada de Funções', 
+    description: 'Estrutura dados para integração com APIs',
+    type: 'function',
+    models: ['gpt-3.5-turbo', 'gpt-3.5-turbo-16k', 'gpt-4', 'gpt-4-turbo', 'gpt-4-32k', 'gpt-4o'] 
+  }
 ];
 
 const PromptChat = () => {
@@ -75,45 +123,115 @@ const PromptChat = () => {
   const [confirmResetOpen, setConfirmResetOpen] = useState(false);
   const [selectedModel, setSelectedModel] = useState('gpt-3.5-turbo');
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [savePresetOpen, setPresetSaveOpen] = useState(false);
+  const [presetName, setPresetName] = useState('');
+  const [presets, setPresets] = useState([]);
+  const [temperature, setTemperature] = useState(0.7);
+  const [maxTokens, setMaxTokens] = useState(2048);
   const [systemPrompt, setSystemPrompt] = useState(
     'You are a helpful assistant. Answer questions clearly and concisely.'
   );
+  const [selectedTools, setSelectedTools] = useState([]);
+  
+  // Estados para gerenciamento de presets
+  const [presetManagerOpen, setPresetManagerOpen] = useState(false);
+  const [presetToEdit, setPresetToEdit] = useState(null);
+  const [presetToDelete, setPresetToDelete] = useState(null);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const [presetAnchorEl, setPresetAnchorEl] = useState(null);
+  const [currentPreset, setCurrentPreset] = useState(null);
   
   // Referências
   const fileInputRef = useRef(null);
   const messagesEndRef = useRef(null);
   const conversationRef = useRef(new ConversationManager(systemPrompt));
   
+  // Carregar presets salvos
+  useEffect(() => {
+    try {
+      const savedPresets = localStorage.getItem('chat_presets');
+      if (savedPresets) {
+        setPresets(JSON.parse(savedPresets));
+      }
+    } catch (e) {
+      console.error('Error loading presets:', e);
+    }
+  }, []);
+  
   // Inicializar ou carregar conversa
   useEffect(() => {
     const chatId = id || 'default';
     const conversation = conversationRef.current;
     
-    // Tentar carregar conversa salva
+    // Se temos um ID específico, verificar se é um preset
+    if (id && id !== 'default') {
+      // Tenta carregar configurações do preset
+      try {
+        const preset = presets.find(p => p.id === id);
+        if (preset) {
+          // Atualizar o preset atual
+          setCurrentPreset(preset);
+          
+          // Aplicar configurações do preset
+          setSelectedModel(preset.model || 'gpt-3.5-turbo');
+          setSystemPrompt(preset.systemPrompt || '');
+          setTemperature(preset.temperature || 0.7);
+          setMaxTokens(preset.maxTokens || 2048);
+          setSelectedTools(preset.tools || []);
+          
+          // Se o preset tem uma conversa salva
+          if (preset.hasConversation) {
+            const loaded = conversation.load(chatId);
+            if (loaded) {
+              loadConversationToUI(conversation);
+            } else {
+              // Inicializar nova conversa com o system prompt do preset
+              conversation.reset(preset.systemPrompt || '');
+            }
+            return;
+          }
+        } else {
+          setCurrentPreset(null);
+        }
+      } catch (e) {
+        console.error('Error loading preset:', e);
+        setCurrentPreset(null);
+      }
+    } else {
+      // Se estamos no chat padrão
+      setCurrentPreset(null);
+    }
+    
+    // Carregamento padrão se não for um preset ou se o preset não tiver conversa
     const loaded = conversation.load(chatId);
     
     if (loaded) {
-      // Converter o histórico para o formato de mensagens da UI
-      const uiMessages = conversation.getHistory().map(msg => ({
-        role: msg.role,
-        content: msg.content,
-        timestamp: new Date().toISOString() // Data aproximada
-      }));
-      
-      // Filtrar mensagens de sistema que não queremos mostrar na UI
-      const visibleMessages = uiMessages.filter(msg => msg.role !== 'system');
-      setMessages(visibleMessages);
-      
-      // Recuperar o system prompt se existir
-      const systemMessage = conversation.getHistory().find(msg => msg.role === 'system');
-      if (systemMessage) {
-        setSystemPrompt(systemMessage.content);
-      }
+      loadConversationToUI(conversation);
     } else {
       // Inicializar nova conversa com o system prompt
       conversation.reset(systemPrompt);
     }
-  }, [id, systemPrompt]);
+  }, [id, systemPrompt, presets]);
+  
+  // Função auxiliar para carregar conversa para a UI
+  const loadConversationToUI = (conversation) => {
+    // Converter o histórico para o formato de mensagens da UI
+    const uiMessages = conversation.getHistory().map(msg => ({
+      role: msg.role,
+      content: msg.content,
+      timestamp: new Date().toISOString() // Data aproximada
+    }));
+    
+    // Filtrar mensagens de sistema que não queremos mostrar na UI
+    const visibleMessages = uiMessages.filter(msg => msg.role !== 'system');
+    setMessages(visibleMessages);
+    
+    // Recuperar o system prompt se existir
+    const systemMessage = conversation.getHistory().find(msg => msg.role === 'system');
+    if (systemMessage) {
+      setSystemPrompt(systemMessage.content);
+    }
+  };
   
   // Rolar para a última mensagem
   useEffect(() => {
@@ -198,6 +316,28 @@ const PromptChat = () => {
       let currentAssistantMessage = '';
       
       try {
+        // Preparar opções adicionais com base nas ferramentas selecionadas
+        const apiOptions = {
+          temperature: temperature,
+          max_tokens: maxTokens
+        };
+        
+        // Adicionar ferramentas se houver alguma selecionada
+        if (selectedTools.length > 0) {
+          // Converter IDs de ferramentas para o formato da API
+          const tools = selectedTools.map(toolId => {
+            const tool = AVAILABLE_TOOLS.find(t => t.id === toolId);
+            if (tool) {
+              return { type: tool.type };
+            }
+            return null;
+          }).filter(Boolean); // Remover itens nulos
+          
+          if (tools.length > 0) {
+            apiOptions.tools = tools;
+          }
+        }
+        
         const streamController = await sendMessageWithStreaming(
           conversationRef.current,
           finalUserContent,
@@ -286,7 +426,8 @@ const PromptChat = () => {
                 return prev;
               });
             }
-          }
+          },
+          apiOptions
         );
         
         // Armazenar referência ao controller para cancelamento
@@ -450,6 +591,234 @@ const PromptChat = () => {
     setSettingsOpen(false);
   };
   
+  // Abrir diálogo para salvar preset
+  const handleOpenSavePreset = () => {
+    setPresetName('');
+    setPresetSaveOpen(true);
+  };
+  
+  // Salvar preset atual
+  const handleSavePreset = () => {
+    if (!presetName.trim()) {
+      setSnackbar({
+        open: true,
+        message: 'Por favor, informe um nome para o preset'
+      });
+      return;
+    }
+    
+    try {
+      let updatedPresets;
+      let presetId;
+      let isEditing = false;
+      
+      // Verificar se estamos editando um preset existente
+      if (presetToEdit) {
+        // Estamos editando um preset existente
+        presetId = presetToEdit.id;
+        isEditing = true;
+        
+        // Atualizar o preset existente
+        updatedPresets = presets.map(p => {
+          if (p.id === presetId) {
+            // Manter dados que não devem ser alterados
+            const hasConversation = p.hasConversation;
+            const lastUpdated = new Date().toISOString();
+            const createdAt = p.createdAt;
+            
+            return {
+              ...p,
+              name: presetName.trim(),
+              model: selectedModel,
+              systemPrompt: systemPrompt,
+              temperature: temperature,
+              maxTokens: maxTokens,
+              tools: selectedTools,
+              lastUpdated,
+              // Preservar status da conversa
+              hasConversation
+            };
+          }
+          return p;
+        });
+      } else {
+        // Criando um novo preset
+        presetId = `preset_${Date.now()}`;
+        
+        // Criar objeto do preset
+        const newPreset = {
+          id: presetId,
+          name: presetName.trim(),
+          model: selectedModel,
+          systemPrompt: systemPrompt,
+          temperature: temperature,
+          maxTokens: maxTokens,
+          tools: selectedTools,
+          createdAt: new Date().toISOString(),
+          hasConversation: false // Inicialmente não tem conversa salva
+        };
+        
+        // Adicionar à lista de presets
+        updatedPresets = [...presets, newPreset];
+      }
+      
+      // Atualizar estado e localStorage
+      setPresets(updatedPresets);
+      localStorage.setItem('chat_presets', JSON.stringify(updatedPresets));
+      
+      // Fechar diálogo e notificar
+      setPresetSaveOpen(false);
+      setPresetToEdit(null); // Limpar estado de edição
+      
+      setSnackbar({
+        open: true,
+        message: isEditing 
+          ? `Preset "${presetName}" atualizado com sucesso` 
+          : `Preset "${presetName}" salvo com sucesso`
+      });
+      
+      // Navegar para o preset
+      navigate(`/prompt-chat/${presetId}`);
+    } catch (e) {
+      console.error('Error saving preset:', e);
+      setSnackbar({
+        open: true,
+        message: 'Erro ao salvar preset: ' + e.message
+      });
+    }
+  };
+  
+  // Salvar conversa atual com o preset
+  const handleSaveConversationWithPreset = () => {
+    if (!id || id === 'default') {
+      setSnackbar({
+        open: true,
+        message: 'Salve primeiro como preset para poder salvar a conversa'
+      });
+      return;
+    }
+    
+    try {
+      // Encontrar o preset atual
+      const presetIndex = presets.findIndex(p => p.id === id);
+      if (presetIndex === -1) {
+        throw new Error('Preset não encontrado');
+      }
+      
+      // Salvar a conversa atual no localStorage com o ID do preset
+      conversationRef.current.save(id);
+      
+      // Marcar o preset como tendo uma conversa salva
+      const updatedPresets = [...presets];
+      updatedPresets[presetIndex] = {
+        ...updatedPresets[presetIndex],
+        hasConversation: true,
+        lastUpdated: new Date().toISOString()
+      };
+      
+      // Atualizar estado e localStorage
+      setPresets(updatedPresets);
+      localStorage.setItem('chat_presets', JSON.stringify(updatedPresets));
+      
+      // Atualizar o preset atual
+      setCurrentPreset(updatedPresets[presetIndex]);
+      
+      setSnackbar({
+        open: true,
+        message: 'Conversa salva com sucesso'
+      });
+    } catch (e) {
+      console.error('Error saving conversation with preset:', e);
+      setSnackbar({
+        open: true,
+        message: 'Erro ao salvar conversa: ' + e.message
+      });
+    }
+  };
+  
+  // Abrir o gerenciador de presets
+  const handleOpenPresetManager = () => {
+    setPresetManagerOpen(true);
+  };
+  
+  // Abrir menu de opções do preset
+  const handlePresetMenuClick = (event, preset) => {
+    setPresetAnchorEl(event.currentTarget);
+    setPresetToEdit(preset);
+  };
+  
+  // Fechar menu de opções do preset
+  const handlePresetMenuClose = () => {
+    setPresetAnchorEl(null);
+    setPresetToEdit(null);
+  };
+  
+  // Editar um preset existente
+  const handleEditPreset = () => {
+    if (!presetToEdit) return;
+    
+    // Fechar o menu
+    handlePresetMenuClose();
+    
+    // Abrir o diálogo de edição com os valores preenchidos
+    setPresetName(presetToEdit.name);
+    setSelectedModel(presetToEdit.model || 'gpt-3.5-turbo');
+    setSystemPrompt(presetToEdit.systemPrompt || '');
+    setTemperature(presetToEdit.temperature || 0.7);
+    setMaxTokens(presetToEdit.maxTokens || 2048);
+    setSelectedTools(presetToEdit.tools || []);
+    
+    // Abrir o diálogo de configurações para edição
+    setSettingsOpen(true);
+  };
+  
+  // Confirmar exclusão de um preset
+  const handleConfirmDeletePreset = () => {
+    if (!presetToEdit) return;
+    
+    // Fechar o menu e abrir diálogo de confirmação
+    handlePresetMenuClose();
+    setPresetToDelete(presetToEdit);
+    setConfirmDeleteOpen(true);
+  };
+  
+  // Excluir um preset
+  const handleDeletePreset = () => {
+    if (!presetToDelete) return;
+    
+    try {
+      // Filtrar o preset da lista
+      const updatedPresets = presets.filter(p => p.id !== presetToDelete.id);
+      
+      // Atualizar estado e localStorage
+      setPresets(updatedPresets);
+      localStorage.setItem('chat_presets', JSON.stringify(updatedPresets));
+      
+      // Remover dados da conversa associados ao preset
+      localStorage.removeItem(`conversation_${presetToDelete.id}`);
+      
+      // Voltar ao chat padrão se o preset excluído era o atual
+      if (id === presetToDelete.id) {
+        navigate('/prompt-chat');
+      }
+      
+      setSnackbar({
+        open: true,
+        message: `Preset "${presetToDelete.name}" excluído com sucesso`
+      });
+    } catch (e) {
+      console.error('Error deleting preset:', e);
+      setSnackbar({
+        open: true,
+        message: 'Erro ao excluir preset: ' + e.message
+      });
+    } finally {
+      // Fechar diálogo de confirmação
+      setConfirmDeleteOpen(false);
+      setPresetToDelete(null);
+    }
+  };
+  
   // Fechar snackbar
   const handleCloseSnackbar = () => {
     setSnackbar({ ...snackbar, open: false });
@@ -544,7 +913,7 @@ const PromptChat = () => {
             </IconButton>
           </Tooltip>
           
-          <Tooltip title="Configurações">
+          <Tooltip title="Configurações do chat">
             <IconButton
               color="inherit"
               onClick={handleOpenSettings}
@@ -554,18 +923,71 @@ const PromptChat = () => {
             </IconButton>
           </Tooltip>
           
+          <Tooltip title="Gerenciar presets">
+            <IconButton
+              color="inherit"
+              onClick={handleOpenPresetManager}
+              sx={{ mr: 1 }}
+            >
+              <TuneIcon />
+            </IconButton>
+          </Tooltip>
+          
           <Avatar sx={{ bgcolor: 'primary.main', mr: 2 }}>
             <SmartToyIcon />
           </Avatar>
           
-          <Box>
-            <Typography variant="h6">Chat com IA</Typography>
-            <Chip 
-              label={AVAILABLE_MODELS.find(m => m.id === selectedModel)?.name || selectedModel}
-              size="small"
-              sx={{ fontSize: '0.75rem' }}
-            />
+          <Box sx={{ flexGrow: 1 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center' }}>
+              <Typography variant="h6">
+                {currentPreset ? currentPreset.name : 'Chat com IA'}
+              </Typography>
+              
+              {currentPreset && (
+                <Tooltip title="Preset configurado">
+                  <Chip 
+                    icon={<TuneIcon fontSize="small" />}
+                    label="Preset" 
+                    size="small"
+                    color="primary"
+                    variant="outlined"
+                    sx={{ ml: 1, height: 20, fontSize: '0.6rem' }}
+                  />
+                </Tooltip>
+              )}
+            </Box>
+            
+            <Box sx={{ display: 'flex', alignItems: 'center' }}>
+              <Chip 
+                label={AVAILABLE_MODELS.find(m => m.id === selectedModel)?.name || selectedModel}
+                size="small"
+                sx={{ fontSize: '0.75rem' }}
+              />
+              
+              {currentPreset?.hasConversation && (
+                <Tooltip title="Este preset tem uma conversa salva">
+                  <Chip 
+                    label="Conversa salva" 
+                    size="small"
+                    variant="outlined"
+                    sx={{ ml: 1, height: 20, fontSize: '0.65rem' }}
+                  />
+                </Tooltip>
+              )}
+            </Box>
           </Box>
+          
+          {currentPreset && (
+            <Tooltip title="Salvar conversa atual com este preset">
+              <IconButton 
+                color="primary" 
+                onClick={handleSaveConversationWithPreset}
+                disabled={isTyping || activeRunId}
+              >
+                <SaveIcon />
+              </IconButton>
+            </Tooltip>
+          )}
         </Toolbar>
       </AppBar>
       
@@ -957,6 +1379,7 @@ const PromptChat = () => {
         </DialogTitle>
         <DialogContent>
           <Box sx={{ mb: 3, mt: 1 }}>
+            {/* Seleção de modelo */}
             <FormControl fullWidth sx={{ mb: 3 }}>
               <InputLabel id="model-label">Modelo</InputLabel>
               <Select
@@ -970,7 +1393,7 @@ const PromptChat = () => {
                     <Box>
                       <Typography variant="body1">{model.name}</Typography>
                       <Typography variant="caption" color="text.secondary">
-                        {model.description}
+                        {model.description} ({model.contextWindow.toLocaleString()} tokens)
                       </Typography>
                     </Box>
                   </MenuItem>
@@ -978,6 +1401,7 @@ const PromptChat = () => {
               </Select>
             </FormControl>
             
+            {/* System Prompt */}
             <TextField
               label="System Prompt"
               fullWidth
@@ -986,7 +1410,101 @@ const PromptChat = () => {
               value={systemPrompt}
               onChange={(e) => setSystemPrompt(e.target.value)}
               helperText="Este prompt define como o assistente deve se comportar. Alterar isso reiniciará a conversa."
+              sx={{ mb: 3 }}
             />
+            
+            {/* Ferramentas */}
+            <Typography variant="subtitle1" gutterBottom>
+              Ferramentas
+            </Typography>
+            
+            <Box sx={{ mb: 3 }}>
+              {AVAILABLE_TOOLS.map(tool => {
+                // Verificar se este modelo suporta esta ferramenta
+                const isCompatible = tool.models.includes(selectedModel);
+                
+                return (
+                  <FormControlLabel
+                    key={tool.id}
+                    control={
+                      <Switch
+                        checked={selectedTools.includes(tool.id)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedTools(prev => [...prev, tool.id]);
+                          } else {
+                            setSelectedTools(prev => prev.filter(id => id !== tool.id));
+                          }
+                        }}
+                        disabled={!isCompatible}
+                      />
+                    }
+                    label={
+                      <Box>
+                        <Typography variant="body2">{tool.name}</Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {tool.description}
+                          {!isCompatible && ' (não disponível para este modelo)'}
+                        </Typography>
+                      </Box>
+                    }
+                    sx={{ 
+                      display: 'flex', 
+                      mb: 1,
+                      opacity: isCompatible ? 1 : 0.6
+                    }}
+                  />
+                );
+              })}
+            </Box>
+            
+            {/* Parâmetros avançados */}
+            <Typography variant="subtitle1" gutterBottom>
+              Parâmetros Avançados
+            </Typography>
+            
+            <Box sx={{ mb: 2 }}>
+              <Typography variant="body2" gutterBottom>
+                Temperatura: {temperature.toFixed(1)}
+              </Typography>
+              <Slider
+                value={temperature}
+                onChange={(e, newValue) => setTemperature(newValue)}
+                min={0.0}
+                max={2.0}
+                step={0.1}
+                marks={[
+                  { value: 0.0, label: '0.0' },
+                  { value: 0.7, label: '0.7' },
+                  { value: 1.0, label: '1.0' },
+                  { value: 2.0, label: '2.0' }
+                ]}
+                valueLabelDisplay="auto"
+              />
+              <Typography variant="caption" color="text.secondary">
+                Valores mais baixos geram respostas mais previsíveis, valores mais altos aumentam a criatividade.
+              </Typography>
+            </Box>
+            
+            <Box>
+              <Typography variant="body2" gutterBottom>
+                Tamanho máximo da resposta: {maxTokens.toLocaleString()} tokens
+              </Typography>
+              <Slider
+                value={maxTokens}
+                onChange={(e, newValue) => setMaxTokens(newValue)}
+                min={256}
+                max={4096}
+                step={256}
+                marks={[
+                  { value: 256, label: '256' },
+                  { value: 1024, label: '1K' },
+                  { value: 2048, label: '2K' },
+                  { value: 4096, label: '4K' }
+                ]}
+                valueLabelDisplay="auto"
+              />
+            </Box>
           </Box>
           
           <Alert severity="info">
@@ -994,11 +1512,63 @@ const PromptChat = () => {
           </Alert>
         </DialogContent>
         <DialogActions>
+          <Button 
+            onClick={handleOpenSavePreset} 
+            color="secondary"
+          >
+            Salvar como Preset
+          </Button>
+          <Box sx={{ flex: 1 }} />
           <Button onClick={() => setSettingsOpen(false)}>
             Cancelar
           </Button>
           <Button onClick={handleSaveSettings} variant="contained" color="primary">
-            Salvar
+            Aplicar Configurações
+          </Button>
+        </DialogActions>
+      </Dialog>
+      
+      {/* Diálogo para salvar preset */}
+      <Dialog
+        open={savePresetOpen}
+        onClose={() => {
+          setPresetSaveOpen(false);
+          setPresetToEdit(null);
+        }}
+        aria-labelledby="save-preset-dialog-title"
+      >
+        <DialogTitle id="save-preset-dialog-title">
+          {presetToEdit ? `Editar Preset "${presetToEdit.name}"` : 'Salvar como Preset'}
+        </DialogTitle>
+        <DialogContent>
+          <DialogContentText sx={{ mb: 2 }}>
+            {presetToEdit 
+              ? 'Atualize as configurações deste preset. A conversa salva não será afetada.'
+              : 'Salve estas configurações como um preset para reuso futuro. Você poderá acessá-lo pela lista de presets.'}
+          </DialogContentText>
+          <TextField
+            autoFocus
+            label="Nome do Preset"
+            fullWidth
+            value={presetName}
+            onChange={(e) => setPresetName(e.target.value)}
+            sx={{ mt: 1 }}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => {
+            setPresetSaveOpen(false);
+            setPresetToEdit(null);
+          }}>
+            Cancelar
+          </Button>
+          <Button 
+            onClick={handleSavePreset} 
+            variant="contained" 
+            color="primary"
+            startIcon={presetToEdit ? <EditIcon /> : <SaveIcon />}
+          >
+            {presetToEdit ? 'Atualizar' : 'Salvar'}
           </Button>
         </DialogActions>
       </Dialog>
@@ -1031,6 +1601,249 @@ const PromptChat = () => {
             disabled={isResettingThread}
           >
             {isResettingThread ? 'Reiniciando...' : 'Reiniciar conversa'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+      
+      {/* Diálogo do Gerenciador de Presets */}
+      <Dialog
+        open={presetManagerOpen}
+        onClose={() => setPresetManagerOpen(false)}
+        aria-labelledby="preset-manager-dialog-title"
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle id="preset-manager-dialog-title">
+          Gerenciador de Configurações
+        </DialogTitle>
+        <DialogContent>
+          <Box sx={{ mb: 2 }}>
+            <Typography variant="body2" color="text.secondary" paragraph>
+              Crie e gerencie configurações personalizadas para diferentes tipos de conversa.
+              As configurações salvas ficarão disponíveis no menu lateral para rápido acesso.
+            </Typography>
+          </Box>
+          
+          {presets.length === 0 ? (
+            <Box sx={{ 
+              display: 'flex', 
+              flexDirection: 'column', 
+              alignItems: 'center',
+              justifyContent: 'center',
+              py: 4,
+              bgcolor: 'background.paper',
+              borderRadius: 1
+            }}>
+              <TuneIcon sx={{ fontSize: 48, color: 'text.secondary', mb: 2, opacity: 0.5 }} />
+              <Typography variant="h6" sx={{ mb: 1 }}>Nenhum preset salvo</Typography>
+              <Typography variant="body2" color="text.secondary" align="center" sx={{ maxWidth: 400, mb: 2 }}>
+                Crie um novo preset salvando suas configurações atuais clicando no botão "Configurações".
+              </Typography>
+              <Button
+                variant="outlined"
+                startIcon={<SettingsIcon />}
+                onClick={() => {
+                  setPresetManagerOpen(false);
+                  setSettingsOpen(true);
+                }}
+              >
+                Configurar e salvar
+              </Button>
+            </Box>
+          ) : (
+            <Box sx={{ 
+              display: 'grid', 
+              gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
+              gap: 2
+            }}>
+              {presets.map(preset => (
+                <Card 
+                  key={preset.id} 
+                  variant="outlined"
+                  sx={{
+                    border: preset.id === id 
+                      ? '2px solid' 
+                      : '1px solid',
+                    borderColor: preset.id === id 
+                      ? 'primary.main' 
+                      : 'divider',
+                    position: 'relative'
+                  }}
+                >
+                  {preset.id === id && (
+                    <Box 
+                      sx={{ 
+                        position: 'absolute', 
+                        top: 0, 
+                        right: 0, 
+                        bgcolor: 'primary.main',
+                        color: 'white',
+                        px: 1,
+                        py: 0.2,
+                        fontSize: '0.65rem',
+                        borderBottomLeftRadius: 4
+                      }}
+                    >
+                      Ativo
+                    </Box>
+                  )}
+                  <CardContent>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                      <Typography 
+                        variant="h6" 
+                        component="div" 
+                        sx={{ 
+                          fontWeight: 500,
+                          color: preset.id === id ? 'primary.main' : 'text.primary'
+                        }}
+                      >
+                        {preset.name}
+                      </Typography>
+                      
+                      <IconButton
+                        size="small"
+                        onClick={(e) => handlePresetMenuClick(e, preset)}
+                      >
+                        <MoreVertIcon fontSize="small" />
+                      </IconButton>
+                    </Box>
+                    
+                    <Divider sx={{ mb: 1 }} />
+                    
+                    <Typography variant="body2" color="text.secondary" gutterBottom>
+                      {AVAILABLE_MODELS.find(m => m.id === preset.model)?.name || preset.model}
+                    </Typography>
+                    
+                    <Typography variant="caption" color="text.secondary" 
+                      sx={{ 
+                        display: 'block', 
+                        mb: 1,
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        maxWidth: '100%'
+                      }}
+                    >
+                      System Prompt: {preset.systemPrompt?.substring(0, 50) || 'Nenhum prompt configurado'}{preset.systemPrompt?.length > 50 ? '...' : ''}
+                    </Typography>
+                    
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 1 }}>
+                      {preset.tools && preset.tools.length > 0 ? preset.tools.map(toolId => {
+                        const tool = AVAILABLE_TOOLS.find(t => t.id === toolId);
+                        return tool ? (
+                          <Chip
+                            key={toolId}
+                            label={tool.name}
+                            size="small"
+                            sx={{ fontSize: '0.65rem', height: 20 }}
+                          />
+                        ) : null;
+                      }) : (
+                        <Typography variant="caption" color="text.secondary">
+                          Sem ferramentas adicionais
+                        </Typography>
+                      )}
+                    </Box>
+                  </CardContent>
+                  <CardActions>
+                    {preset.id === id ? (
+                      <Button 
+                        size="small"
+                        variant="contained"
+                        color="primary"
+                        disabled
+                      >
+                        Ativo
+                      </Button>
+                    ) : (
+                      <Button 
+                        size="small" 
+                        variant="outlined"
+                        onClick={() => {
+                          navigate(`/prompt-chat/${preset.id}`);
+                          setPresetManagerOpen(false);
+                        }}
+                      >
+                        Usar
+                      </Button>
+                    )}
+                    {preset.hasConversation && (
+                      <Chip 
+                        label="Conversa salva" 
+                        size="small"
+                        variant="outlined"
+                        sx={{ ml: 'auto', height: 20, fontSize: '0.65rem' }}
+                      />
+                    )}
+                  </CardActions>
+                </Card>
+              ))}
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button 
+            onClick={() => {
+              setPresetManagerOpen(false);
+              setSettingsOpen(true);
+            }} 
+            startIcon={<SaveIcon />}
+          >
+            Salvar atual como preset
+          </Button>
+          <Button onClick={() => setPresetManagerOpen(false)}>
+            Fechar
+          </Button>
+        </DialogActions>
+      </Dialog>
+      
+      {/* Menu de opções do preset */}
+      <Menu
+        anchorEl={presetAnchorEl}
+        open={Boolean(presetAnchorEl)}
+        onClose={handlePresetMenuClose}
+      >
+        <MenuItem onClick={handleEditPreset}>
+          <ListItemIcon>
+            <EditIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>Editar</ListItemText>
+        </MenuItem>
+        <MenuItem onClick={handleConfirmDeletePreset}>
+          <ListItemIcon>
+            <DeleteIcon fontSize="small" color="error" />
+          </ListItemIcon>
+          <ListItemText>Excluir</ListItemText>
+        </MenuItem>
+      </Menu>
+      
+      {/* Diálogo de confirmação de exclusão de preset */}
+      <Dialog
+        open={confirmDeleteOpen}
+        onClose={() => setConfirmDeleteOpen(false)}
+        aria-labelledby="delete-preset-dialog-title"
+      >
+        <DialogTitle id="delete-preset-dialog-title" sx={{ display: 'flex', alignItems: 'center' }}>
+          <WarningIcon color="error" sx={{ mr: 1 }} />
+          Excluir preset?
+        </DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Você está prestes a excluir o preset "{presetToDelete?.name}".
+            {presetToDelete?.hasConversation && ' A conversa salva com este preset também será excluída.'}
+            Esta ação não pode ser desfeita.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setConfirmDeleteOpen(false)} color="primary">
+            Cancelar
+          </Button>
+          <Button 
+            onClick={handleDeletePreset} 
+            color="error" 
+            variant="contained"
+          >
+            Excluir
           </Button>
         </DialogActions>
       </Dialog>

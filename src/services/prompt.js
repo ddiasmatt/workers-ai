@@ -184,18 +184,26 @@ export const sendMessage = async (conversation, message, model = 'gpt-3.5-turbo'
   try {
     console.log(`Sending message to model ${model}...`);
     
+    // Construir o objeto de requisição
+    const requestBody = {
+      model: model,
+      messages: conversation.getHistory(),
+      temperature: finalOptions.temperature,
+      max_tokens: finalOptions.max_tokens
+    };
+    
+    // Adicionar tools se fornecido
+    if (finalOptions.tools && finalOptions.tools.length > 0) {
+      requestBody.tools = finalOptions.tools;
+    }
+    
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${API_KEY}`
       },
-      body: JSON.stringify({
-        model: model,
-        messages: conversation.getHistory(),
-        temperature: finalOptions.temperature,
-        max_tokens: finalOptions.max_tokens
-      })
+      body: JSON.stringify(requestBody)
     });
     
     if (!response.ok) {
@@ -241,19 +249,34 @@ export const sendMessageWithStreaming = async (conversation, message, model = 'g
   try {
     console.log(`Sending streaming message to model ${model}...`);
     
+    // Construir o objeto de requisição
+    const requestBody = {
+      model: model,
+      messages: conversation.getHistory(),
+      temperature: finalOptions.temperature,
+      max_tokens: finalOptions.max_tokens,
+      stream: true
+    };
+    
+    // Adicionar tools se fornecido
+    if (finalOptions.tools && finalOptions.tools.length > 0) {
+      requestBody.tools = finalOptions.tools;
+    }
+    
+    console.log('Request configuration:', {
+      model: model,
+      temperature: finalOptions.temperature,
+      max_tokens: finalOptions.max_tokens,
+      hasTools: finalOptions.tools && finalOptions.tools.length > 0
+    });
+    
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${API_KEY}`
       },
-      body: JSON.stringify({
-        model: model,
-        messages: conversation.getHistory(),
-        temperature: finalOptions.temperature,
-        max_tokens: finalOptions.max_tokens,
-        stream: true
-      })
+      body: JSON.stringify(requestBody)
     });
     
     if (!response.ok) {
