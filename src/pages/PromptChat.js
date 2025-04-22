@@ -92,63 +92,148 @@ const AVAILABLE_MODELS = [
   { id: 'gpt-3.5-turbo-16k', name: 'GPT-3.5 Turbo 16K', description: 'Contexto ampliado', contextWindow: 16385, maxOutputTokens: 2048 }
 ];
 
-// Ferramentas disponíveis
+// Ferramentas disponíveis com as definições completas para a API
 const AVAILABLE_TOOLS = [
   { 
     id: 'code_interpreter', 
     name: 'Interpretador de Código', 
     description: 'Executa código Python para análises e cálculos',
     type: 'code_interpreter',
-    models: ['gpt-4', 'gpt-4-turbo', 'gpt-4-32k', 'gpt-4o', 'gpt-4o-mini', 'gpt-4-1106-preview', 'gpt-4.1', 'gpt-4.1-mini', 'gpt-4.1-nano', 'gpt-4.5', 'gpt-o3'] 
+    models: ['gpt-4', 'gpt-4-turbo', 'gpt-4-32k', 'gpt-4o', 'gpt-4o-mini', 'gpt-4-1106-preview', 'gpt-4.1', 'gpt-4.1-mini', 'gpt-4.1-nano', 'gpt-4.5', 'gpt-o3'],
+    apiDefinition: {
+      type: 'code_interpreter'
+    }
   },
   { 
     id: 'retrieval', 
     name: 'Recuperação de Conhecimento', 
     description: 'Pesquisa informações em arquivos anexados',
     type: 'retrieval',
-    models: ['gpt-3.5-turbo', 'gpt-3.5-turbo-16k', 'gpt-4', 'gpt-4-turbo', 'gpt-4-32k', 'gpt-4o', 'gpt-4o-mini', 'gpt-4-1106-preview', 'gpt-4.1', 'gpt-4.1-mini', 'gpt-4.1-nano', 'gpt-4.5', 'gpt-o3'] 
+    models: ['gpt-3.5-turbo', 'gpt-3.5-turbo-16k', 'gpt-4', 'gpt-4-turbo', 'gpt-4-32k', 'gpt-4o', 'gpt-4o-mini', 'gpt-4-1106-preview', 'gpt-4.1', 'gpt-4.1-mini', 'gpt-4.1-nano', 'gpt-4.5', 'gpt-o3'],
+    apiDefinition: {
+      type: 'retrieval'
+    }
   },
   { 
     id: 'web_browsing', 
     name: 'Navegação Web', 
     description: 'Acessa e resume conteúdo da web',
     type: 'web_browsing',
-    models: ['gpt-4', 'gpt-4-turbo', 'gpt-4-32k', 'gpt-4o', 'gpt-4o-mini', 'gpt-4-1106-preview', 'gpt-4.1', 'gpt-4.1-mini', 'gpt-4.1-nano', 'gpt-4.5', 'gpt-o3'] 
+    models: ['gpt-4', 'gpt-4-turbo', 'gpt-4-32k', 'gpt-4o', 'gpt-4o-mini', 'gpt-4-1106-preview', 'gpt-4.1', 'gpt-4.1-mini', 'gpt-4.1-nano', 'gpt-4.5', 'gpt-o3'],
+    apiDefinition: {
+      type: 'web_browsing'
+    }
   },
   { 
     id: 'function_calling', 
     name: 'Chamada de Funções', 
     description: 'Estrutura dados para integração com APIs',
     type: 'function',
-    models: ['gpt-3.5-turbo', 'gpt-3.5-turbo-16k', 'gpt-4', 'gpt-4-turbo', 'gpt-4-32k', 'gpt-4o', 'gpt-4o-mini', 'gpt-4-1106-preview', 'gpt-4.1', 'gpt-4.1-mini', 'gpt-4.1-nano', 'gpt-4.5', 'gpt-o3'] 
+    models: ['gpt-3.5-turbo', 'gpt-3.5-turbo-16k', 'gpt-4', 'gpt-4-turbo', 'gpt-4-32k', 'gpt-4o', 'gpt-4o-mini', 'gpt-4-1106-preview', 'gpt-4.1', 'gpt-4.1-mini', 'gpt-4.1-nano', 'gpt-4.5', 'gpt-o3'],
+    apiDefinition: {
+      type: 'function',
+      function: {
+        name: 'get_data',
+        description: 'Recupera dados de uma fonte externa',
+        parameters: {
+          type: 'object',
+          properties: {
+            query: {
+              type: 'string',
+              description: 'A consulta a ser executada'
+            }
+          },
+          required: ['query']
+        }
+      }
+    }
   },
   {
     id: 'vision',
     name: 'Visão Computacional', 
     description: 'Processa e analisa imagens e vídeos',
     type: 'vision',
-    models: ['gpt-4o', 'gpt-4.1', 'gpt-4.1-mini', 'gpt-4.1-nano', 'gpt-4.5', 'gpt-o3']
+    models: ['gpt-4o', 'gpt-4.1', 'gpt-4.1-mini', 'gpt-4.1-nano', 'gpt-4.5', 'gpt-o3'],
+    apiDefinition: {
+      type: 'vision'
+    }
   },
   {
     id: 'advanced_reasoning',
     name: 'Raciocínio Avançado', 
     description: 'Capacidades avançadas para seguir instruções específicas',
-    type: 'advanced_reasoning',
-    models: ['gpt-4.1', 'gpt-4.1-mini', 'gpt-4.1-nano', 'gpt-4.5', 'gpt-o3']
+    type: 'function',
+    models: ['gpt-4.1', 'gpt-4.1-mini', 'gpt-4.1-nano', 'gpt-4.5', 'gpt-o3'],
+    apiDefinition: {
+      type: 'function',
+      function: {
+        name: 'advanced_reasoning',
+        description: 'Aplicar raciocínio avançado para resolver problemas complexos',
+        parameters: {
+          type: 'object',
+          properties: {
+            problem: {
+              type: 'string',
+              description: 'O problema a ser resolvido'
+            }
+          },
+          required: ['problem']
+        }
+      }
+    }
   },
   {
     id: 'coding',
     name: 'Especialista em Código', 
     description: 'Performance superior em benchmarks de programação',
-    type: 'coding',
-    models: ['gpt-4.1', 'gpt-4.1-mini', 'gpt-4.1-nano']
+    type: 'function',
+    models: ['gpt-4.1', 'gpt-4.1-mini', 'gpt-4.1-nano'],
+    apiDefinition: {
+      type: 'function',
+      function: {
+        name: 'code_expert',
+        description: 'Gerar ou analisar código com alta qualidade',
+        parameters: {
+          type: 'object',
+          properties: {
+            language: {
+              type: 'string',
+              description: 'Linguagem de programação'
+            },
+            task: {
+              type: 'string',
+              description: 'Tarefa a ser realizada'
+            }
+          },
+          required: ['task']
+        }
+      }
+    }
   },
   {
     id: 'long_context',
     name: 'Contexto Longo', 
     description: 'Capacidade de lidar com 1M+ tokens de entrada',
-    type: 'long_context',
-    models: ['gpt-4.1', 'gpt-4.1-mini', 'gpt-4.1-nano']
+    type: 'function',
+    models: ['gpt-4.1', 'gpt-4.1-mini', 'gpt-4.1-nano'],
+    apiDefinition: {
+      type: 'function',
+      function: {
+        name: 'process_long_context',
+        description: 'Processar e analisar documentos muito longos',
+        parameters: {
+          type: 'object',
+          properties: {
+            action: {
+              type: 'string',
+              description: 'Ação a ser executada no documento longo',
+              enum: ['summarize', 'extract', 'analyze']
+            }
+          },
+          required: ['action']
+        }
+      }
+    }
   }
 ];
 
@@ -397,36 +482,23 @@ const PromptChat = () => {
         
         // Adicionar ferramentas se houver alguma selecionada
         if (selectedTools.length > 0) {
-          // Converter IDs de ferramentas para o formato da API
-          const tools = selectedTools.map(toolId => {
-            const tool = AVAILABLE_TOOLS.find(t => t.id === toolId);
-            if (tool) {
-              // Caso especial para ferramentas do tipo "function"
-              if (tool.type === 'function') {
-                return {
-                  type: 'function',
-                  function: {
-                    name: tool.id,
-                    description: tool.description,
-                    parameters: {
-                      type: "object",
-                      properties: {},
-                      required: []
-                    }
-                  }
-                };
-              } 
-              // Para outros tipos de ferramentas
-              else {
-                return { type: tool.type };
+          try {
+            // Usar as definições de API pré-configuradas para cada ferramenta
+            const tools = selectedTools.map(toolId => {
+              const tool = AVAILABLE_TOOLS.find(t => t.id === toolId);
+              if (tool && tool.apiDefinition) {
+                return { ...tool.apiDefinition };
               }
+              return null;
+            }).filter(Boolean); // Remover itens nulos
+            
+            if (tools.length > 0) {
+              apiOptions.tools = tools;
+              apiOptions.tool_choice = "auto";
+              console.log('Sending tools:', JSON.stringify(tools, null, 2)); // Debug formatado
             }
-            return null;
-          }).filter(Boolean); // Remover itens nulos
-          
-          if (tools.length > 0) {
-            apiOptions.tools = tools;
-            console.log('Sending tools:', JSON.stringify(tools)); // Para debug
+          } catch (toolError) {
+            console.error('Error preparing tools:', toolError);
           }
         }
         
@@ -493,9 +565,31 @@ const PromptChat = () => {
             },
             onError: (errorMsg) => {
               console.error('Streaming error:', errorMsg);
-              setError('Erro durante a resposta: ' + errorMsg);
+              
+              // Formatar mensagem de erro para ser mais útil
+              let errorMessage = 'Desculpe, ocorreu um erro durante o processamento da resposta.';
+              
+              // Erros específicos de ferramenta
+              if (errorMsg.includes('Missing required parameter: \'tools[0].function\'')) {
+                errorMessage = 'Erro de configuração de ferramentas: Esta ferramenta requer parâmetros adicionais. Por favor, desative as ferramentas nas configurações ou selecione outro modelo.';
+              } else if (errorMsg.includes('tool_choice')) {
+                errorMessage = 'Erro de configuração: Problema com a seleção de ferramentas. Por favor, desative as ferramentas nas configurações.';
+              } else if (errorMsg.toLowerCase().includes('model')) {
+                errorMessage = 'Erro de modelo: O modelo selecionado pode não estar disponível ou não suportar as ferramentas selecionadas.';
+              } else if (errorMsg.toLowerCase().includes('error')) {
+                // Manter a mensagem de erro original se parece útil
+                errorMessage = 'Erro: ' + errorMsg;
+              }
+              
+              setError('Erro: ' + errorMessage);
               setIsTyping(false);
               setActiveRunId(null);
+              
+              // Exibir aviso visível para o usuário
+              setSnackbar({
+                open: true,
+                message: 'Erro: Tente desativar as ferramentas nas configurações'
+              });
               
               // Atualizar a mensagem "Pensando..." para mostrar o erro
               setMessages(prev => {
@@ -507,7 +601,7 @@ const PromptChat = () => {
                   const updatedMessages = [...prev];
                   updatedMessages[messageIndex] = {
                     ...updatedMessages[messageIndex],
-                    content: 'Desculpe, ocorreu um erro durante o processamento da resposta.',
+                    content: errorMessage,
                     isThinking: false,
                     isStreaming: false,
                     isError: true
@@ -535,7 +629,29 @@ const PromptChat = () => {
       
     } catch (err) {
       console.error('Error sending message:', err);
-      setError('Erro ao obter resposta: ' + (err.message || 'Erro desconhecido'));
+      
+      // Formatar mensagem de erro para ser mais útil
+      let errorMessage = 'Desculpe, ocorreu um erro ao processar sua mensagem.';
+      
+      // Erros específicos
+      if (err.message && err.message.includes('Missing required parameter: \'tools[0].function\'')) {
+        errorMessage = 'Erro de configuração de ferramentas: Esta ferramenta requer parâmetros adicionais. Por favor, desative as ferramentas nas configurações.';
+        
+        // Remover automaticamente ferramentas problemáticas
+        setSelectedTools([]);
+        
+        // Notificar o usuário
+        setSnackbar({
+          open: true,
+          message: 'Ferramentas desativadas automaticamente devido a erros de compatibilidade'
+        });
+      } else if (err.message && err.message.includes('not available')) {
+        errorMessage = 'O modelo selecionado não está disponível. Por favor, selecione outro modelo nas configurações.';
+      } else if (err.message) {
+        errorMessage = 'Erro: ' + err.message;
+      }
+      
+      setError('Erro: ' + errorMessage);
       setIsTyping(false);
       
       // Substituir a mensagem "Pensando..." por uma mensagem de erro
@@ -548,7 +664,7 @@ const PromptChat = () => {
           const newMessages = [...prev];
           newMessages[thinkingIndex] = {
             role: 'assistant',
-            content: 'Desculpe, ocorreu um erro ao processar sua mensagem. Por favor, tente novamente.',
+            content: errorMessage,
             timestamp: new Date().toISOString(),
             isError: true,
             isStreaming: false,
