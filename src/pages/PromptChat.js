@@ -401,13 +401,32 @@ const PromptChat = () => {
           const tools = selectedTools.map(toolId => {
             const tool = AVAILABLE_TOOLS.find(t => t.id === toolId);
             if (tool) {
-              return { type: tool.type };
+              // Caso especial para ferramentas do tipo "function"
+              if (tool.type === 'function') {
+                return {
+                  type: 'function',
+                  function: {
+                    name: tool.id,
+                    description: tool.description,
+                    parameters: {
+                      type: "object",
+                      properties: {},
+                      required: []
+                    }
+                  }
+                };
+              } 
+              // Para outros tipos de ferramentas
+              else {
+                return { type: tool.type };
+              }
             }
             return null;
           }).filter(Boolean); // Remover itens nulos
           
           if (tools.length > 0) {
             apiOptions.tools = tools;
+            console.log('Sending tools:', JSON.stringify(tools)); // Para debug
           }
         }
         

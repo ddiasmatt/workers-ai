@@ -195,6 +195,8 @@ export const sendMessage = async (conversation, message, model = 'gpt-3.5-turbo'
     // Adicionar tools se fornecido
     if (finalOptions.tools && finalOptions.tools.length > 0) {
       requestBody.tools = finalOptions.tools;
+      // Adicionar tool_choice se tiver ferramentas
+      requestBody.tool_choice = "auto";
     }
     
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -261,6 +263,8 @@ export const sendMessageWithStreaming = async (conversation, message, model = 'g
     // Adicionar tools se fornecido
     if (finalOptions.tools && finalOptions.tools.length > 0) {
       requestBody.tools = finalOptions.tools;
+      // Adicionar tool_choice se tiver ferramentas
+      requestBody.tool_choice = "auto";
     }
     
     console.log('Request configuration:', {
