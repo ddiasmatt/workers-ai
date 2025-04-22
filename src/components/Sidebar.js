@@ -38,52 +38,88 @@ const Sidebar = () => {
   useEffect(() => {
     try {
       const history = [];
+      
+      // Debug para ver todas as chaves
+      console.log('Todas as chaves no localStorage:', 
+        Array.from({ length: localStorage.length }, (_, i) => localStorage.key(i)));
+      
       // Procurar por conversas salvas no localStorage
       for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i);
+        
+        // Verificamos tanto as conversas normais quanto conversas de presets
         if (key && key.startsWith('conversation_') && key !== 'conversation_default') {
           const chatId = key.replace('conversation_', '');
           
-          // Verificar se é um preset ou uma conversa independente
-          const isPreset = presets.some(p => p.id === chatId);
-          
-          if (!isPreset) {
-            // Tentar obter os dados da conversa
-            try {
-              const conversationData = JSON.parse(localStorage.getItem(key));
+          try {
+            const conversationData = JSON.parse(localStorage.getItem(key));
+            
+            // Pular se não houver dados ou mensagens vazias
+            if (!conversationData || conversationData.length < 2) continue;
+            
+            // Verificar se é um preset
+            const isPresetConversation = presets.some(p => p.id === chatId && p.hasConversation);
+            const preset = presets.find(p => p.id === chatId);
+            
+            // Se for mensagem de um preset, só adicionamos se o preset diz que tem conversa
+            if (preset && !preset.hasConversation) {
+              console.log('Pulando conversa de preset sem hasConversation:', chatId);
+              continue;
+            }
+            
+            // Encontrar a primeira mensagem do usuário para usar como título
+            const firstUserMessage = conversationData.find(m => m.role === 'user');
+            const title = firstUserMessage 
+              ? firstUserMessage.content.substring(0, 30) + (firstUserMessage.content.length > 30 ? '...' : '')
+              : isPresetConversation && preset ? preset.name : 'Conversa sem título';
+            
+            // Encontrar a última mensagem para data de última atividade
+            const lastMessage = conversationData[conversationData.length - 1];
+            const lastActivity = lastMessage?.timestamp 
+              ? new Date(lastMessage.timestamp) 
+              : new Date();
+            
+            // Determinar o modelo usado
+            const systemMessage = conversationData.find(m => m.role === 'system');
+            let modelInfo = preset?.model || 'GPT-4o';
+            
+            // Se é uma conversa de preset, adicionamos ao preset
+            if (isPresetConversation) {
+              // Adicionar conversa ao histórico com informações do preset
+              history.push({
+                id: chatId,
+                title: preset.name,
+                lastActivity,
+                messageCount: conversationData.filter(m => m.role !== 'system').length,
+                modelInfo: preset.model,
+                isPreset: true
+              });
               
-              // Encontrar a primeira mensagem do usuário para usar como título
-              const firstUserMessage = conversationData.find(m => m.role === 'user');
-              const title = firstUserMessage 
-                ? firstUserMessage.content.substring(0, 30) + (firstUserMessage.content.length > 30 ? '...' : '')
-                : 'Conversa sem título';
-              
-              // Encontrar a última mensagem para data de última atividade
-              const lastMessage = conversationData[conversationData.length - 1];
-              const lastActivity = lastMessage?.timestamp 
-                ? new Date(lastMessage.timestamp) 
-                : new Date();
-              
-              // Determinar o modelo usado
-              const systemMessage = conversationData.find(m => m.role === 'system');
-              let modelInfo = 'GPT-4o';
-              
+              console.log(`Conversa de preset adicionada: ${preset.name} (ID: ${chatId})`);
+            } 
+            // Se não for um preset (é uma conversa normal)
+            else if (!preset) {
+              // Adicionar conversa ao histórico
               history.push({
                 id: chatId,
                 title,
                 lastActivity,
-                messageCount: conversationData.length,
-                modelInfo
+                messageCount: conversationData.filter(m => m.role !== 'system').length,
+                modelInfo,
+                isPreset: false
               });
-            } catch (e) {
-              console.error('Error parsing conversation data:', e);
+              
+              console.log(`Conversa normal adicionada: ${title} (ID: ${chatId})`);
             }
+          } catch (e) {
+            console.error(`Erro processando conversa ${chatId}:`, e);
           }
         }
       }
       
       // Ordenar por data da última atividade (mais recente primeiro)
       history.sort((a, b) => b.lastActivity - a.lastActivity);
+      console.log('Histórico final de conversas:', history);
       setChatHistory(history);
     } catch (e) {
       console.error('Error loading chat history:', e);
@@ -239,24 +275,48 @@ const Sidebar = () => {
                 <ListItemButton 
                   onClick={() => navigate(`/prompt-chat/${chat.id}`)}
                   selected={location.pathname === `/prompt-chat/${chat.id}`}
+                  sx={chat.isPreset ? { 
+                    borderLeft: '2px solid rgba(16, 163, 127, 0.5)'
+                  } : {}}
                 >
                   <ListItemIcon>
                     <Avatar 
                       sx={{ 
                         width: 28, 
                         height: 28, 
-                        bgcolor: 'rgba(16, 163, 127, 0.1)',
-                        color: 'rgba(16, 163, 127, 0.8)'
+                        bgcolor: chat.isPreset 
+                          ? (chat.modelInfo?.includes('4') 
+                              ? 'rgba(75, 0, 130, 0.1)' 
+                              : 'rgba(16, 163, 127, 0.1)')
+                          : 'rgba(25, 118, 210, 0.1)',
+                        color: chat.isPreset 
+                          ? (chat.modelInfo?.includes('4') 
+                              ? 'rgba(75, 0, 130, 0.8)' 
+                              : 'rgba(16, 163, 127, 0.8)')
+                          : 'rgba(25, 118, 210, 0.8)'
                       }}
                     >
-                      <ChatIcon fontSize="small" />
+                      {chat.isPreset 
+                        ? chat.title.substring(0, 1).toUpperCase()
+                        : <ChatIcon fontSize="small" />
+                      }
                     </Avatar>
                   </ListItemIcon>
                   <ListItemText 
                     primary={
-                      <Typography variant="body2" noWrap>
-                        {chat.title}
-                      </Typography>
+                      <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                        <Typography variant="body2" noWrap sx={{ flex: 1 }}>
+                          {chat.title}
+                        </Typography>
+                        {chat.isPreset && (
+                          <Chip 
+                            size="small" 
+                            label="Modelo" 
+                            variant="outlined"
+                            sx={{ height: 16, fontSize: '0.6rem', ml: 1 }}
+                          />
+                        )}
+                      </Box>
                     }
                     secondaryTypographyProps={{ component: 'div' }}
                     secondary={
@@ -268,6 +328,9 @@ const Sidebar = () => {
                             hour: '2-digit', 
                             minute: '2-digit' 
                           })}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary" noWrap>
+                          {chat.modelInfo || 'GPT-4o'} · {chat.messageCount} msgs
                         </Typography>
                       </Box>
                     }
