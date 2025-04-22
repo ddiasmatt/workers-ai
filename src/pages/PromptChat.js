@@ -1110,25 +1110,7 @@ const PromptChat = () => {
       borderRadius: 1,
       overflow: 'hidden'
     }}>
-      {/* Banner de instruções */}
-      {!messages.length && (
-        <Box sx={{
-          bgcolor: 'secondary.light',
-          color: 'white',
-          p: 2,
-          textAlign: 'center',
-          fontSize: '1rem',
-          fontWeight: 'bold',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: 1
-        }}>
-          <SettingsIcon /> Clique no ícone de engrenagem verde para configurar e criar presets
-          &nbsp;&nbsp;&nbsp;|&nbsp;&nbsp;&nbsp;
-          <TuneIcon /> Clique no ícone roxo para gerenciar seus presets salvos
-        </Box>
-      )}
+      {/* Banner de instruções removido */}
       
       {/* Cabeçalho */}
       <AppBar position="static" color="default" elevation={1}>
