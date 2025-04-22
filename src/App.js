@@ -1,17 +1,14 @@
-import React, { useContext } from 'react';
+import React, { useState } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
-import { AssistantsProvider, AssistantsContext } from './contexts/AssistantsContext';
 import ApiKeyDialog from './components/ApiKeyDialog';
 
 // Componentes
 import Layout from './components/Layout';
 import Home from './pages/Home';
-import CreateAssistant from './pages/CreateAssistant';
-import ChatInterface from './pages/ChatInterface';
-import EditAssistant from './pages/EditAssistant';
 import PromptChat from './pages/PromptChat';
+import { hasApiKey, setApiKey } from './services/prompt';
 
 // Tema personalizado
 const theme = createTheme({
@@ -33,34 +30,52 @@ const theme = createTheme({
   },
 });
 
-// Componente que gerencia o diálogo de API key
-const ApiKeyManager = () => {
-  const { apiKeyDialogOpen, closeApiKeyDialog } = useContext(AssistantsContext);
-  
-  return (
-    <ApiKeyDialog 
-      open={apiKeyDialogOpen} 
-      onClose={closeApiKeyDialog} 
-    />
-  );
-};
+// Context simplificado para API key
+export const ApiKeyContext = React.createContext({
+  isApiKeySet: false,
+  apiKeyDialogOpen: false,
+  openApiKeyDialog: () => {},
+  closeApiKeyDialog: () => {}
+});
 
 function App() {
+  const [apiKeyDialogOpen, setApiKeyDialogOpen] = useState(false);
+  const [isApiKeySet, setIsApiKeySet] = useState(hasApiKey());
+  
+  // Abrir diálogo de configuração da API key
+  const openApiKeyDialog = () => {
+    setApiKeyDialogOpen(true);
+  };
+  
+  // Fechar diálogo de configuração da API key
+  const closeApiKeyDialog = (key) => {
+    setApiKeyDialogOpen(false);
+    if (key) {
+      setApiKey(key);
+      setIsApiKeySet(true);
+    }
+  };
+  
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <AssistantsProvider>
+      <ApiKeyContext.Provider value={{
+        isApiKeySet,
+        apiKeyDialogOpen,
+        openApiKeyDialog,
+        closeApiKeyDialog
+      }}>
         <Layout>
-          <ApiKeyManager />
+          <ApiKeyDialog 
+            open={apiKeyDialogOpen} 
+            onClose={closeApiKeyDialog} 
+          />
           <Routes>
             <Route path="/" element={<Home />} />
-            <Route path="/create" element={<CreateAssistant />} />
-            <Route path="/edit/:id" element={<EditAssistant />} />
-            <Route path="/chat/:id" element={<ChatInterface />} />
             <Route path="/prompt-chat/:id?" element={<PromptChat />} />
           </Routes>
         </Layout>
-      </AssistantsProvider>
+      </ApiKeyContext.Provider>
     </ThemeProvider>
   );
 }

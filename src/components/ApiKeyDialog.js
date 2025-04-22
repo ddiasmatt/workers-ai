@@ -15,7 +15,7 @@ import {
   Chip
 } from '@mui/material';
 import { Visibility, VisibilityOff } from '@mui/icons-material';
-import { setApiKey, hasApiKey, getMaskedApiKey } from '../services/openai';
+import { setApiKey, hasApiKey, getMaskedApiKey } from '../services/prompt';
 
 const ApiKeyDialog = ({ open, onClose }) => {
   const [apiKey, setApiKeyState] = useState('');
@@ -48,7 +48,7 @@ const ApiKeyDialog = ({ open, onClose }) => {
       setApiKeyState('');
       setShowApiKey(false);
       setError('');
-      onClose(true);
+      onClose(apiKey);
     } catch (err) {
       setError(err.message || 'Erro ao salvar a chave da API');
     }
@@ -76,7 +76,7 @@ const ApiKeyDialog = ({ open, onClose }) => {
       <DialogTitle>Configurar Chave da API OpenAI</DialogTitle>
       <DialogContent>
         <DialogContentText gutterBottom>
-          Para utilizar os recursos da OpenAI, é necessário fornecer uma chave de API válida.
+          Para utilizar os modelos avançados de IA, é necessário fornecer uma chave de API válida da OpenAI.
           Sua chave é armazenada apenas localmente no seu navegador.
         </DialogContentText>
 

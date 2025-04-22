@@ -16,6 +16,7 @@ import {
   ListItemAvatar,
   Divider,
   Alert,
+  AlertTitle,
   Button,
   AppBar,
   Toolbar,
@@ -66,30 +67,11 @@ import {
 
 // Modelos disponíveis
 const AVAILABLE_MODELS = [
-  // Novos modelos GPT-4.1 (Maio 2024)
-  { id: 'gpt-4.1', name: 'GPT-4.1 🔥', description: 'Nova geração de modelos avançados', contextWindow: 1047576, maxOutputTokens: 32768 },
-  { id: 'gpt-4.1-mini', name: 'GPT-4.1 Mini 🔥', description: 'Versão mais econômica do GPT-4.1', contextWindow: 1047576, maxOutputTokens: 32768 },
-  { id: 'gpt-4.1-nano', name: 'GPT-4.1 Nano 🔥', description: 'Modelo mais econômico da OpenAI', contextWindow: 1047576, maxOutputTokens: 32768 },
-  
-  // Outros modelos recentes
-  { id: 'gpt-o3', name: 'GPT-o3', description: 'Modelo otimizado com funções avançadas', contextWindow: 256000, maxOutputTokens: 32768 },
-  { id: 'gpt-4.5', name: 'GPT-4.5', description: 'Alto desempenho em tarefas complexas', contextWindow: 256000, maxOutputTokens: 16384 },
-  
-  // Modelos da família GPT-4o
-  { id: 'gpt-4o', name: 'GPT-4o', description: 'Performance multimodal otimizada', contextWindow: 128000, maxOutputTokens: 4096 },
-  { id: 'gpt-4o-mini', name: 'GPT-4o Mini', description: 'Versão mais econômica do GPT-4o', contextWindow: 128000, maxOutputTokens: 4096 },
-  
-  // Modelos GPT-4 Turbo
-  { id: 'gpt-4-turbo', name: 'GPT-4 Turbo', description: 'GPT-4 otimizado para performance', contextWindow: 128000, maxOutputTokens: 4096 },
-  { id: 'gpt-4-1106-preview', name: 'GPT-4 Turbo Preview', description: 'Versão prévia com conhecimento mais recente', contextWindow: 128000, maxOutputTokens: 4096 },
-  
-  // Modelos anteriores GPT-4
-  { id: 'gpt-4', name: 'GPT-4', description: 'Preciso e confiável', contextWindow: 8192, maxOutputTokens: 2048 },
-  { id: 'gpt-4-32k', name: 'GPT-4 32K', description: 'GPT-4 com contexto ampliado', contextWindow: 32768, maxOutputTokens: 4096 },
-  
-  // Modelos GPT-3.5
-  { id: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo', description: 'Rápido e econômico', contextWindow: 16385, maxOutputTokens: 2048 },
-  { id: 'gpt-3.5-turbo-16k', name: 'GPT-3.5 Turbo 16K', description: 'Contexto ampliado', contextWindow: 16385, maxOutputTokens: 2048 }
+  // Novos modelos avançados
+  { id: 'gpt-4.1', name: 'GPT-4.1 🔥', description: 'Nova geração com 1M+ tokens de contexto', contextWindow: 1047576, maxOutputTokens: 32768 },
+  { id: 'gpt-4.5', name: 'GPT-4.5 🔥', description: 'Alto desempenho em tarefas complexas', contextWindow: 256000, maxOutputTokens: 16384 },
+  { id: 'gpt-o3', name: 'GPT-o3 🔥', description: 'Modelo otimizado com funções avançadas', contextWindow: 256000, maxOutputTokens: 32768 },
+  { id: 'gpt-4o', name: 'GPT-4o', description: 'Performance multimodal otimizada', contextWindow: 128000, maxOutputTokens: 4096 }
 ];
 
 // Ferramentas disponíveis com as definições completas para a API
@@ -99,7 +81,7 @@ const AVAILABLE_TOOLS = [
     name: 'Interpretador de Código', 
     description: 'Executa código Python para análises e cálculos',
     type: 'code_interpreter',
-    models: ['gpt-4', 'gpt-4-turbo', 'gpt-4-32k', 'gpt-4o', 'gpt-4o-mini', 'gpt-4-1106-preview', 'gpt-4.1', 'gpt-4.1-mini', 'gpt-4.1-nano', 'gpt-4.5', 'gpt-o3'],
+    models: ['gpt-4o', 'gpt-o3', 'gpt-4.5'],
     apiDefinition: {
       type: 'code_interpreter'
     }
@@ -109,7 +91,7 @@ const AVAILABLE_TOOLS = [
     name: 'Recuperação de Conhecimento', 
     description: 'Pesquisa informações em arquivos anexados',
     type: 'retrieval',
-    models: ['gpt-3.5-turbo', 'gpt-3.5-turbo-16k', 'gpt-4', 'gpt-4-turbo', 'gpt-4-32k', 'gpt-4o', 'gpt-4o-mini', 'gpt-4-1106-preview', 'gpt-4.1', 'gpt-4.1-mini', 'gpt-4.1-nano', 'gpt-4.5', 'gpt-o3'],
+    models: ['gpt-4o', 'gpt-o3', 'gpt-4.5'],
     apiDefinition: {
       type: 'retrieval'
     }
@@ -119,7 +101,7 @@ const AVAILABLE_TOOLS = [
     name: 'Navegação Web', 
     description: 'Acessa e resume conteúdo da web',
     type: 'web_browsing',
-    models: ['gpt-4', 'gpt-4-turbo', 'gpt-4-32k', 'gpt-4o', 'gpt-4o-mini', 'gpt-4-1106-preview', 'gpt-4.1', 'gpt-4.1-mini', 'gpt-4.1-nano', 'gpt-4.5', 'gpt-o3'],
+    models: ['gpt-4o', 'gpt-o3', 'gpt-4.5'],
     apiDefinition: {
       type: 'web_browsing'
     }
@@ -129,7 +111,7 @@ const AVAILABLE_TOOLS = [
     name: 'Chamada de Funções', 
     description: 'Estrutura dados para integração com APIs',
     type: 'function',
-    models: ['gpt-3.5-turbo', 'gpt-3.5-turbo-16k', 'gpt-4', 'gpt-4-turbo', 'gpt-4-32k', 'gpt-4o', 'gpt-4o-mini', 'gpt-4-1106-preview', 'gpt-4.1', 'gpt-4.1-mini', 'gpt-4.1-nano', 'gpt-4.5', 'gpt-o3'],
+    models: ['gpt-4o', 'gpt-o3', 'gpt-4.5'],
     apiDefinition: {
       type: 'function',
       function: {
@@ -153,7 +135,7 @@ const AVAILABLE_TOOLS = [
     name: 'Visão Computacional', 
     description: 'Processa e analisa imagens e vídeos',
     type: 'vision',
-    models: ['gpt-4o', 'gpt-4.1', 'gpt-4.1-mini', 'gpt-4.1-nano', 'gpt-4.5', 'gpt-o3'],
+    models: ['gpt-4o', 'gpt-o3', 'gpt-4.5'],
     apiDefinition: {
       type: 'vision'
     }
@@ -163,7 +145,7 @@ const AVAILABLE_TOOLS = [
     name: 'Raciocínio Avançado', 
     description: 'Capacidades avançadas para seguir instruções específicas',
     type: 'function',
-    models: ['gpt-4.1', 'gpt-4.1-mini', 'gpt-4.1-nano', 'gpt-4.5', 'gpt-o3'],
+    models: ['gpt-o3', 'gpt-4.5'],
     apiDefinition: {
       type: 'function',
       function: {
@@ -183,39 +165,11 @@ const AVAILABLE_TOOLS = [
     }
   },
   {
-    id: 'coding',
-    name: 'Especialista em Código', 
-    description: 'Performance superior em benchmarks de programação',
-    type: 'function',
-    models: ['gpt-4.1', 'gpt-4.1-mini', 'gpt-4.1-nano'],
-    apiDefinition: {
-      type: 'function',
-      function: {
-        name: 'code_expert',
-        description: 'Gerar ou analisar código com alta qualidade',
-        parameters: {
-          type: 'object',
-          properties: {
-            language: {
-              type: 'string',
-              description: 'Linguagem de programação'
-            },
-            task: {
-              type: 'string',
-              description: 'Tarefa a ser realizada'
-            }
-          },
-          required: ['task']
-        }
-      }
-    }
-  },
-  {
     id: 'long_context',
     name: 'Contexto Longo', 
     description: 'Capacidade de lidar com 1M+ tokens de entrada',
     type: 'function',
-    models: ['gpt-4.1', 'gpt-4.1-mini', 'gpt-4.1-nano'],
+    models: ['gpt-4.1'],
     apiDefinition: {
       type: 'function',
       function: {
@@ -371,6 +325,21 @@ const PromptChat = () => {
     }
   }, [systemPrompt]);
   
+  // Efeito para desativar ferramentas quando selecionar modelos GPT-4.1
+  useEffect(() => {
+    if (selectedModel.includes('4.1') && selectedTools.length > 0) {
+      // Limpar ferramentas selecionadas
+      setSelectedTools([]);
+      console.log('Ferramentas desativadas automaticamente para modelo GPT-4.1');
+      
+      // Notificar o usuário
+      setSnackbar({
+        open: true,
+        message: 'Ferramentas desativadas para compatibilidade com GPT-4.1'
+      });
+    }
+  }, [selectedModel]);
+  
   // Função auxiliar para carregar conversa para a UI
   const loadConversationToUI = (conversation) => {
     // Converter o histórico para o formato de mensagens da UI
@@ -480,8 +449,11 @@ const PromptChat = () => {
           max_tokens: maxTokens
         };
         
-        // Adicionar ferramentas se houver alguma selecionada
-        if (selectedTools.length > 0) {
+        // Verificar se estamos usando modelos GPT-4.1 (temporariamente desabilitar ferramentas)
+        const is41Model = selectedModel.includes('4.1');
+        
+        // Adicionar ferramentas se houver alguma selecionada E NÃO for modelo GPT-4.1
+        if (selectedTools.length > 0 && !is41Model) {
           try {
             // Usar as definições de API pré-configuradas para cada ferramenta
             const tools = selectedTools.map(toolId => {
@@ -500,6 +472,15 @@ const PromptChat = () => {
           } catch (toolError) {
             console.error('Error preparing tools:', toolError);
           }
+        } else if (is41Model && selectedTools.length > 0) {
+          console.log('Tools disabled for GPT-4.1 models to prevent errors');
+          // Alerta para o usuário
+          setTimeout(() => {
+            setSnackbar({
+              open: true,
+              message: 'Ferramentas desativadas para modelos GPT-4.1 devido a limitações da API'
+            });
+          }, 500);
         }
         
         const streamController = await sendMessageWithStreaming(
@@ -1681,43 +1662,53 @@ const PromptChat = () => {
             </Typography>
             
             <Box sx={{ mb: 3 }}>
-              {AVAILABLE_TOOLS.map(tool => {
-                // Verificar se este modelo suporta esta ferramenta
-                const isCompatible = tool.models.includes(selectedModel);
-                
-                return (
-                  <FormControlLabel
-                    key={tool.id}
-                    control={
-                      <Switch
-                        checked={selectedTools.includes(tool.id)}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setSelectedTools(prev => [...prev, tool.id]);
-                          } else {
-                            setSelectedTools(prev => prev.filter(id => id !== tool.id));
-                          }
-                        }}
-                        disabled={!isCompatible}
-                      />
-                    }
-                    label={
-                      <Box>
-                        <Typography variant="body2">{tool.name}</Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          {tool.description}
-                          {!isCompatible && ' (não disponível para este modelo)'}
-                        </Typography>
-                      </Box>
-                    }
-                    sx={{ 
-                      display: 'flex', 
-                      mb: 1,
-                      opacity: isCompatible ? 1 : 0.6
-                    }}
-                  />
-                );
-              })}
+              {selectedModel.includes('4.1') ? (
+                <Alert severity="warning" sx={{ mb: 2 }}>
+                  <AlertTitle>Ferramentas desativadas para modelos GPT-4.1</AlertTitle>
+                  <Typography variant="body2">
+                    Devido a limitações da API atual, as ferramentas não estão disponíveis para os modelos GPT-4.1.
+                    Para usar ferramentas, selecione outro modelo como GPT-4o ou GPT-4.
+                  </Typography>
+                </Alert>
+              ) : (
+                AVAILABLE_TOOLS.map(tool => {
+                  // Verificar se este modelo suporta esta ferramenta
+                  const isCompatible = tool.models.includes(selectedModel);
+                  
+                  return (
+                    <FormControlLabel
+                      key={tool.id}
+                      control={
+                        <Switch
+                          checked={selectedTools.includes(tool.id)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedTools(prev => [...prev, tool.id]);
+                            } else {
+                              setSelectedTools(prev => prev.filter(id => id !== tool.id));
+                            }
+                          }}
+                          disabled={!isCompatible}
+                        />
+                      }
+                      label={
+                        <Box>
+                          <Typography variant="body2">{tool.name}</Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            {tool.description}
+                            {!isCompatible && ' (não disponível para este modelo)'}
+                          </Typography>
+                        </Box>
+                      }
+                      sx={{ 
+                        display: 'flex', 
+                        mb: 1,
+                        opacity: isCompatible ? 1 : 0.6
+                      }}
+                    />
+                  );
+                })
+              )}
             </Box>
             
             {/* Parâmetros avançados */}

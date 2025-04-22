@@ -1,36 +1,21 @@
 import React, { useContext } from 'react';
 import { Box, AppBar, Toolbar, Typography, Container, Button, Tooltip } from '@mui/material';
 import Sidebar from './Sidebar';
-import { AssistantsContext } from '../contexts/AssistantsContext';
+import { ApiKeyContext } from '../App';
 import KeyIcon from '@mui/icons-material/Key';
-import RefreshIcon from '@mui/icons-material/Refresh';
 
 const Layout = ({ children }) => {
-  const { openApiKeyDialog, isApiKeySet, refreshAssistants, isLoading } = useContext(AssistantsContext);
+  const { openApiKeyDialog, isApiKeySet } = useContext(ApiKeyContext);
 
   return (
     <Box sx={{ display: 'flex', height: '100vh' }}>
       <AppBar position="fixed" sx={{ zIndex: (theme) => theme.zIndex.drawer + 1 }}>
         <Toolbar sx={{ display: 'flex', justifyContent: 'space-between' }}>
           <Typography variant="h6" noWrap component="div">
-            Criador de Assistentes IA
+            Chat IA Avançado
           </Typography>
           
           <Box>
-            <Tooltip title="Recarregar assistentes">
-              <span>
-                <Button 
-                  startIcon={<RefreshIcon />} 
-                  color="inherit" 
-                  sx={{ mr: 1 }}
-                  onClick={refreshAssistants}
-                  disabled={isLoading || !isApiKeySet}
-                >
-                  Atualizar
-                </Button>
-              </span>
-            </Tooltip>
-            
             <Tooltip title={isApiKeySet ? 'Editar chave da API' : 'Configurar chave da API'}>
               <Button 
                 startIcon={<KeyIcon />} 

@@ -9,79 +9,74 @@ import {
   Toolbar,
   Divider,
   Box,
-  Button,
   ListItemButton,
   Typography,
   Chip,
   Avatar,
-  Badge,
-  Collapse
+  Button,
+  Tooltip
 } from '@mui/material';
-import AddIcon from '@mui/icons-material/Add';
 import HomeIcon from '@mui/icons-material/Home';
-import SmartToyIcon from '@mui/icons-material/SmartToy';
 import ChatIcon from '@mui/icons-material/Chat';
 import MessageIcon from '@mui/icons-material/Message';
 import HistoryIcon from '@mui/icons-material/History';
-import ExpandLess from '@mui/icons-material/ExpandLess';
-import ExpandMore from '@mui/icons-material/ExpandMore';
-import TuneIcon from '@mui/icons-material/Tune';
-import { AssistantsContext } from '../contexts/AssistantsContext';
+import KeyIcon from '@mui/icons-material/Key';
+import SettingsIcon from '@mui/icons-material/Settings';
+import { ApiKeyContext } from '../App';
+import { hasApiKey } from '../services/prompt';
 
 const drawerWidth = 260;
 
 const Sidebar = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { assistants, isApiKeySet } = useContext(AssistantsContext);
+  const { openApiKeyDialog, isApiKeySet } = useContext(ApiKeyContext);
   const [chatHistory, setChatHistory] = useState([]);
   const [presets, setPresets] = useState([]);
-  const [presetsOpen, setPresetsOpen] = useState(true);
   
-  // Carregar histórico de chats
+  // Carregar histórico de conversas diretas
   useEffect(() => {
-    const loadChatHistory = () => {
+    try {
       const history = [];
-      
-      // Encontrar todos os itens localStorage que contêm 'thread_'
-      const keys = [];
+      // Procurar por conversas salvas no localStorage
       for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i);
-        if (key && key.startsWith('thread_')) {
-          const assistantId = key.replace('thread_', '');
-          const threadId = localStorage.getItem(key);
+        if (key && key.startsWith('conversation_') && key !== 'conversation_default') {
+          const chatId = key.replace('conversation_', '');
           
-          // Buscar o assistente correspondente
-          const assistant = assistants.find(a => a.id === assistantId);
-          if (assistant && threadId) {
-            // Verificar se existem mensagens para este chat
-            const messagesKey = `chat_${assistantId}`;
-            const hasMessages = localStorage.getItem(messagesKey) !== null;
-            
-            // Obter a data da última mensagem
-            let lastActivity = new Date();
-            const messages = localStorage.getItem(messagesKey);
-            if (messages) {
-              try {
-                const parsedMessages = JSON.parse(messages);
-                if (parsedMessages.length > 0) {
-                  const lastMessage = parsedMessages[parsedMessages.length - 1];
-                  lastActivity = new Date(lastMessage.timestamp);
-                }
-              } catch (e) {
-                console.error('Error parsing chat messages:', e);
-              }
-            }
-            
-            if (hasMessages) {
+          // Verificar se é um preset ou uma conversa independente
+          const isPreset = presets.some(p => p.id === chatId);
+          
+          if (!isPreset) {
+            // Tentar obter os dados da conversa
+            try {
+              const conversationData = JSON.parse(localStorage.getItem(key));
+              
+              // Encontrar a primeira mensagem do usuário para usar como título
+              const firstUserMessage = conversationData.find(m => m.role === 'user');
+              const title = firstUserMessage 
+                ? firstUserMessage.content.substring(0, 30) + (firstUserMessage.content.length > 30 ? '...' : '')
+                : 'Conversa sem título';
+              
+              // Encontrar a última mensagem para data de última atividade
+              const lastMessage = conversationData[conversationData.length - 1];
+              const lastActivity = lastMessage?.timestamp 
+                ? new Date(lastMessage.timestamp) 
+                : new Date();
+              
+              // Determinar o modelo usado
+              const systemMessage = conversationData.find(m => m.role === 'system');
+              let modelInfo = 'GPT-4o';
+              
               history.push({
-                assistantId,
-                threadId,
-                name: assistant.name,
-                model: assistant.model,
+                id: chatId,
+                title,
                 lastActivity,
-                messageCount: messages ? JSON.parse(messages).length : 0
+                messageCount: conversationData.length,
+                modelInfo
               });
+            } catch (e) {
+              console.error('Error parsing conversation data:', e);
             }
           }
         }
@@ -89,14 +84,11 @@ const Sidebar = () => {
       
       // Ordenar por data da última atividade (mais recente primeiro)
       history.sort((a, b) => b.lastActivity - a.lastActivity);
-      
       setChatHistory(history);
-    };
-    
-    if (assistants.length > 0) {
-      loadChatHistory();
+    } catch (e) {
+      console.error('Error loading chat history:', e);
     }
-  }, [assistants]);
+  }, [location.pathname, presets]);
   
   // Carregar presets
   useEffect(() => {
@@ -118,9 +110,6 @@ const Sidebar = () => {
     }
   }, [location.pathname]); // Recarregar ao mudar de página
   
-  // Certifique-se de que assistants é um array ou inicialize como vazio
-  const safeAssistants = Array.isArray(assistants) ? assistants : [];
-  
   return (
     <Drawer
       variant="permanent"
@@ -141,7 +130,7 @@ const Sidebar = () => {
               <ListItemIcon>
                 <HomeIcon />
               </ListItemIcon>
-              <ListItemText primary="Home" />
+              <ListItemText primary="Modelos de Conversa" />
             </ListItemButton>
           </ListItem>
           
@@ -153,124 +142,122 @@ const Sidebar = () => {
               <ListItemIcon>
                 <MessageIcon />
               </ListItemIcon>
-              <ListItemText primary="Chat Direto" />
-              <Chip 
-                label="Novo" 
-                size="small" 
-                color="primary" 
-                sx={{ height: 20, fontSize: '0.65rem' }} 
+              <ListItemText primary="Nova Conversa" />
+            </ListItemButton>
+          </ListItem>
+          
+          <Divider sx={{ my: 1 }} />
+          
+          <ListItem disablePadding>
+            <ListItemButton onClick={openApiKeyDialog}>
+              <ListItemIcon>
+                <KeyIcon color={isApiKeySet ? "success" : "error"} />
+              </ListItemIcon>
+              <ListItemText 
+                primary="Configurar API" 
+                secondary={isApiKeySet ? "Chave configurada" : "Chave não configurada"}
               />
             </ListItemButton>
           </ListItem>
-          
-          {/* Lista de Presets - Cabeçalho */}
-          <ListItem disablePadding>
-            <ListItemButton onClick={() => setPresetsOpen(!presetsOpen)}>
-              <ListItemIcon>
-                <TuneIcon />
-              </ListItemIcon>
-              <ListItemText primary="Configurações Salvas" />
-              {presetsOpen ? <ExpandLess /> : <ExpandMore />}
-            </ListItemButton>
-          </ListItem>
-          
-          {/* Lista de Presets - Conteúdo */}
-          <Collapse in={presetsOpen} timeout="auto" unmountOnExit>
-            <List component="div" disablePadding>
-              {presets.length > 0 ? (
-                presets.map((preset) => (
-                  <ListItem key={preset.id} disablePadding>
-                    <ListItemButton 
-                      onClick={() => navigate(`/prompt-chat/${preset.id}`)}
-                      selected={location.pathname === `/prompt-chat/${preset.id}`}
-                      sx={{ pl: 4 }}
+        </List>
+        
+        <Divider sx={{ my: 1 }} />
+        
+        {/* Presets (modelos de conversa) */}
+        <Typography variant="overline" sx={{ px: 2, color: 'text.secondary', mt: 1 }}>
+          Modelos Salvos
+        </Typography>
+        
+        <List sx={{ pb: 1, maxHeight: '35%', overflow: 'auto' }}>
+          {presets.length > 0 ? (
+            presets.map((preset) => (
+              <ListItem key={preset.id} disablePadding>
+                <ListItemButton 
+                  onClick={() => navigate(`/prompt-chat/${preset.id}`)}
+                  selected={location.pathname === `/prompt-chat/${preset.id}`}
+                >
+                  <ListItemIcon sx={{ minWidth: 36 }}>
+                    <Avatar 
+                      sx={{ 
+                        width: 24, 
+                        height: 24, 
+                        bgcolor: preset.model?.includes('4') ? 'rgba(75, 0, 130, 0.1)' : 'rgba(0, 120, 212, 0.1)',
+                        color: preset.model?.includes('4') ? 'rgba(75, 0, 130, 0.8)' : 'rgba(0, 120, 212, 0.8)',
+                        fontSize: '0.8rem'
+                      }}
                     >
-                      <ListItemIcon sx={{ minWidth: 36 }}>
-                        <Avatar 
-                          sx={{ 
-                            width: 24, 
-                            height: 24, 
-                            bgcolor: preset.model?.startsWith('gpt-4') ? 'rgba(75, 0, 130, 0.1)' : 'rgba(0, 120, 212, 0.1)',
-                            color: preset.model?.startsWith('gpt-4') ? 'rgba(75, 0, 130, 0.8)' : 'rgba(0, 120, 212, 0.8)',
-                            fontSize: '0.8rem'
-                          }}
-                        >
-                          {preset.name?.substring(0, 1) || 'P'}
-                        </Avatar>
-                      </ListItemIcon>
-                      <ListItemText 
-                        primary={
-                          <Typography variant="body2" noWrap>
-                            {preset.name}
-                          </Typography>
-                        } 
-                        secondary={
-                          <Typography variant="caption" color="text.secondary" noWrap>
-                            {preset.model || 'GPT-3.5'}
-                          </Typography>
-                        }
-                      />
-                      {preset.hasConversation && (
-                        <Chip 
-                          size="small" 
-                          label="Conversa" 
-                          variant="outlined"
-                          sx={{ height: 20, fontSize: '0.6rem' }}
-                        />
-                      )}
-                    </ListItemButton>
-                  </ListItem>
-                ))
-              ) : (
-                <ListItem sx={{ pl: 4, opacity: 0.7 }}>
+                      {preset.name?.substring(0, 1) || 'P'}
+                    </Avatar>
+                  </ListItemIcon>
                   <ListItemText 
                     primary={
-                      <Typography variant="caption">
-                        Nenhum preset salvo
+                      <Typography variant="body2" noWrap>
+                        {preset.name}
+                      </Typography>
+                    } 
+                    secondary={
+                      <Typography variant="caption" color="text.secondary" noWrap>
+                        {preset.model || 'GPT-3.5'}
                       </Typography>
                     }
                   />
-                </ListItem>
-              )}
-            </List>
-          </Collapse>
+                  {preset.hasConversation && (
+                    <Chip 
+                      size="small" 
+                      label="Conversa" 
+                      variant="outlined"
+                      sx={{ height: 20, fontSize: '0.6rem' }}
+                    />
+                  )}
+                </ListItemButton>
+              </ListItem>
+            ))
+          ) : (
+            <ListItem sx={{ opacity: 0.7 }}>
+              <ListItemText 
+                primary={
+                  <Typography variant="caption">
+                    Nenhum modelo salvo
+                  </Typography>
+                }
+              />
+            </ListItem>
+          )}
         </List>
         
-        <Divider sx={{ mt: 2, mb: 2 }} />
+        <Divider sx={{ mb: 1 }} />
         
+        {/* Histórico de Conversas */}
         <Typography variant="overline" sx={{ px: 2, color: 'text.secondary' }}>
-          Histórico de Conversas
+          Conversas Recentes
         </Typography>
         
         <List sx={{ flex: 1, overflow: 'auto' }}>
           {chatHistory.length > 0 ? (
             chatHistory.map((chat) => (
-              <ListItem key={chat.threadId} disablePadding>
+              <ListItem key={chat.id} disablePadding>
                 <ListItemButton 
-                  onClick={() => navigate(`/chat/${chat.assistantId}`)}
-                  selected={location.pathname === `/chat/${chat.assistantId}`}
-                  sx={{ borderLeft: chat.threadId ? '3px solid #2196f3' : 'none' }}
+                  onClick={() => navigate(`/prompt-chat/${chat.id}`)}
+                  selected={location.pathname === `/prompt-chat/${chat.id}`}
                 >
                   <ListItemIcon>
-                    <Badge 
-                      badgeContent={chat.messageCount > 0 ? chat.messageCount : null} 
-                      color="primary"
-                      sx={{ '& .MuiBadge-badge': { fontSize: '0.6rem' } }}
+                    <Avatar 
+                      sx={{ 
+                        width: 28, 
+                        height: 28, 
+                        bgcolor: 'rgba(16, 163, 127, 0.1)',
+                        color: 'rgba(16, 163, 127, 0.8)'
+                      }}
                     >
-                      <Avatar 
-                        sx={{ 
-                          width: 34, 
-                          height: 34, 
-                          bgcolor: chat.model?.startsWith('gpt-4') ? 'rgba(75, 0, 130, 0.1)' : 'rgba(0, 120, 212, 0.1)',
-                          color: chat.model?.startsWith('gpt-4') ? 'rgba(75, 0, 130, 0.8)' : 'rgba(0, 120, 212, 0.8)'
-                        }}
-                      >
-                        <ChatIcon fontSize="small" />
-                      </Avatar>
-                    </Badge>
+                      <ChatIcon fontSize="small" />
+                    </Avatar>
                   </ListItemIcon>
                   <ListItemText 
-                    primary={chat.name || 'Chat sem nome'}
+                    primary={
+                      <Typography variant="body2" noWrap>
+                        {chat.title}
+                      </Typography>
+                    }
                     secondaryTypographyProps={{ component: 'div' }}
                     secondary={
                       <Box sx={{ display: 'flex', flexDirection: 'column' }}>
@@ -296,20 +283,29 @@ const Sidebar = () => {
               <ListItemText 
                 primary="Nenhuma conversa" 
                 secondaryTypographyProps={{ component: 'div' }}
-                secondary="Inicie um chat com um assistente" 
+                secondary="Inicie uma nova conversa" 
               />
             </ListItem>
           )}
         </List>
         
-        {!isApiKeySet && (
+        {!hasApiKey() && (
           <Box sx={{ p: 2, bgcolor: 'background.paper', boxShadow: 1, mt: 'auto' }}>
             <Typography variant="body2" color="error" gutterBottom>
               Chave de API não configurada
             </Typography>
             <Typography variant="caption" color="text.secondary">
-              Configure sua chave da OpenAI para criar e usar assistentes.
+              Configure sua chave da OpenAI para usar os modelos de IA.
             </Typography>
+            <Button 
+              variant="outlined" 
+              size="small" 
+              startIcon={<KeyIcon />}
+              onClick={openApiKeyDialog}
+              sx={{ mt: 1, width: '100%' }}
+            >
+              Configurar API
+            </Button>
           </Box>
         )}
       </Box>
