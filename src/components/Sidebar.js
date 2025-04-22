@@ -20,6 +20,7 @@ import AddIcon from '@mui/icons-material/Add';
 import HomeIcon from '@mui/icons-material/Home';
 import SmartToyIcon from '@mui/icons-material/SmartToy';
 import ChatIcon from '@mui/icons-material/Chat';
+import MessageIcon from '@mui/icons-material/Message';
 import HistoryIcon from '@mui/icons-material/History';
 import { AssistantsContext } from '../contexts/AssistantsContext';
 
@@ -115,6 +116,24 @@ const Sidebar = () => {
                 <HomeIcon />
               </ListItemIcon>
               <ListItemText primary="Home" />
+            </ListItemButton>
+          </ListItem>
+          
+          <ListItem disablePadding>
+            <ListItemButton 
+              selected={location.pathname.startsWith('/prompt-chat')}
+              onClick={() => navigate('/prompt-chat')}
+            >
+              <ListItemIcon>
+                <MessageIcon />
+              </ListItemIcon>
+              <ListItemText primary="Chat Direto" />
+              <Chip 
+                label="Novo" 
+                size="small" 
+                color="primary" 
+                sx={{ height: 20, fontSize: '0.65rem' }} 
+              />
             </ListItemButton>
           </ListItem>
         </List>

@@ -11,6 +11,7 @@ import Home from './pages/Home';
 import CreateAssistant from './pages/CreateAssistant';
 import ChatInterface from './pages/ChatInterface';
 import EditAssistant from './pages/EditAssistant';
+import PromptChat from './pages/PromptChat';
 
 // Tema personalizado
 const theme = createTheme({
@@ -56,6 +57,7 @@ function App() {
             <Route path="/create" element={<CreateAssistant />} />
             <Route path="/edit/:id" element={<EditAssistant />} />
             <Route path="/chat/:id" element={<ChatInterface />} />
+            <Route path="/prompt-chat/:id?" element={<PromptChat />} />
           </Routes>
         </Layout>
       </AssistantsProvider>
