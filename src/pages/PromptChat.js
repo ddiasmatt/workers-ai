@@ -19,7 +19,6 @@ import {
   AlertTitle,
   Button,
   AppBar,
-  Toolbar,
   Snackbar,
   Chip,
   Tooltip,
@@ -1114,7 +1113,7 @@ const PromptChat = () => {
       
       {/* Cabeçalho */}
       <AppBar position="static" color="default" elevation={1}>
-        <Toolbar>
+        <Box sx={{ display: 'flex', alignItems: 'center', padding: 2 }}>
           <IconButton 
             edge="start" 
             color="inherit" 
@@ -1210,7 +1209,7 @@ const PromptChat = () => {
               </IconButton>
             </Tooltip>
           )}
-        </Toolbar>
+        </Box>
       </AppBar>
       
       {/* Área de mensagens */}

@@ -6,7 +6,6 @@ import {
   ListItem,
   ListItemIcon,
   ListItemText,
-  Toolbar,
   Divider,
   Box,
   ListItemButton,
@@ -155,8 +154,7 @@ const Sidebar = () => {
         [`& .MuiDrawer-paper`]: { width: drawerWidth, boxSizing: 'border-box' }
       }}
     >
-      <Toolbar />
-      <Box sx={{ overflow: 'auto', height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <Box sx={{ overflow: 'auto', height: '100%', display: 'flex', flexDirection: 'column', pt: 1 }}>
         <List>
           <ListItem disablePadding>
             <ListItemButton 
