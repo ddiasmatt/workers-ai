@@ -346,8 +346,12 @@ const PromptChat = () => {
     const uiMessages = conversation.getHistory().map(msg => ({
       role: msg.role,
       content: msg.content,
-      timestamp: new Date().toISOString() // Data aproximada
+      // Usar o timestamp original ou criar um novo se não existir
+      timestamp: msg.timestamp || new Date().toISOString()
     }));
+    
+    // Debug para verificação
+    console.log('Carregando mensagens com timestamps:', uiMessages);
     
     // Filtrar mensagens de sistema que não queremos mostrar na UI
     const visibleMessages = uiMessages.filter(msg => msg.role !== 'system');

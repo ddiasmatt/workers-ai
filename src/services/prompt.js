@@ -121,8 +121,12 @@ export class ConversationManager {
   }
   
   // Adicionar mensagem ao histórico
-  addMessage(role, content) {
-    const message = { role, content };
+  addMessage(role, content, timestamp = null) {
+    const message = { 
+      role, 
+      content,
+      timestamp: timestamp || new Date().toISOString() 
+    };
     this.history.push(message);
     return message;
   }
@@ -169,8 +173,9 @@ export class ConversationManager {
 export const sendMessage = async (conversation, message, model = 'gpt-3.5-turbo', options = {}) => {
   if (!API_KEY) throw new Error('API key is required');
   
-  // Adicionar mensagem do usuário ao histórico
-  conversation.addMessage('user', message);
+  // Adicionar mensagem do usuário ao histórico com timestamp
+  const userTimestamp = new Date().toISOString();
+  conversation.addMessage('user', message, userTimestamp);
   
   // Opções padrão
   const defaultOptions = {
@@ -217,9 +222,10 @@ export const sendMessage = async (conversation, message, model = 'gpt-3.5-turbo'
     const result = await response.json();
     console.log('Response received:', result);
     
-    // Extrair e adicionar resposta ao histórico
+    // Extrair e adicionar resposta ao histórico com timestamp
     const responseContent = result.choices[0]?.message?.content || '';
-    conversation.addMessage('assistant', responseContent);
+    const assistantTimestamp = new Date().toISOString();
+    conversation.addMessage('assistant', responseContent, assistantTimestamp);
     
     return {
       content: responseContent,
@@ -236,8 +242,9 @@ export const sendMessage = async (conversation, message, model = 'gpt-3.5-turbo'
 export const sendMessageWithStreaming = async (conversation, message, model = 'gpt-3.5-turbo', callbacks = {}, options = {}) => {
   if (!API_KEY) throw new Error('API key is required');
   
-  // Adicionar mensagem do usuário ao histórico
-  conversation.addMessage('user', message);
+  // Adicionar mensagem do usuário ao histórico com timestamp
+  const userTimestamp = new Date().toISOString();
+  conversation.addMessage('user', message, userTimestamp);
   
   // Opções padrão
   const defaultOptions = {
@@ -350,8 +357,9 @@ export const sendMessageWithStreaming = async (conversation, message, model = 'g
           }
         }
         
-        // Adicionar a resposta completa ao histórico
-        conversation.addMessage('assistant', fullResponse);
+        // Adicionar a resposta completa ao histórico com timestamp
+        const assistantTimestamp = new Date().toISOString();
+        conversation.addMessage('assistant', fullResponse, assistantTimestamp);
         
         // Sinalizar conclusão
         if (callbacks.onComplete) {
