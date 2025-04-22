@@ -66,12 +66,24 @@ import {
 
 // Modelos disponíveis
 const AVAILABLE_MODELS = [
-  { id: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo', description: 'Rápido e econômico', contextWindow: 16385 },
-  { id: 'gpt-3.5-turbo-16k', name: 'GPT-3.5 Turbo 16K', description: 'Contexto ampliado', contextWindow: 16385 },
-  { id: 'gpt-4', name: 'GPT-4', description: 'Mais capaz e preciso', contextWindow: 8192 },
-  { id: 'gpt-4-32k', name: 'GPT-4 32K', description: 'GPT-4 com contexto ampliado', contextWindow: 32768 },
-  { id: 'gpt-4-turbo', name: 'GPT-4 Turbo', description: 'Versão mais recente e rápida do GPT-4', contextWindow: 128000 },
-  { id: 'gpt-4o', name: 'GPT-4o', description: 'Modelo mais avançado e otimizado', contextWindow: 128000 }
+  // Novos modelos (últimos lançamentos)
+  { id: 'gpt-o3', name: 'GPT-o3 🔥', description: 'Novo modelo otimizado com funções avançadas', contextWindow: 256000, maxOutputTokens: 32768 },
+  { id: 'gpt-4.5', name: 'GPT-4.5 🔥', description: 'Melhor conhecimento e capacidades de linguagem', contextWindow: 256000, maxOutputTokens: 16384 },
+  { id: 'gpt-4.1', name: 'GPT-4.1 🔥', description: 'Modelo avançado com melhor raciocínio', contextWindow: 32768, maxOutputTokens: 8192 },
+  
+  // Modelos recentes
+  { id: 'gpt-4o', name: 'GPT-4o', description: 'Performance multimodal otimizada', contextWindow: 128000, maxOutputTokens: 4096 },
+  { id: 'gpt-4o-mini', name: 'GPT-4o Mini', description: 'Versão mais rápida e econômica do GPT-4o', contextWindow: 128000, maxOutputTokens: 4096 },
+  { id: 'gpt-4-1106-preview', name: 'GPT-4 Turbo Preview', description: 'Versão prévia com conhecimento mais recente', contextWindow: 128000, maxOutputTokens: 4096 },
+  { id: 'gpt-4-turbo', name: 'GPT-4 Turbo', description: 'GPT-4 otimizado para performance', contextWindow: 128000, maxOutputTokens: 4096 },
+  
+  // Modelos anteriores GPT-4
+  { id: 'gpt-4', name: 'GPT-4', description: 'Preciso e confiável', contextWindow: 8192, maxOutputTokens: 2048 },
+  { id: 'gpt-4-32k', name: 'GPT-4 32K', description: 'GPT-4 com contexto ampliado', contextWindow: 32768, maxOutputTokens: 4096 },
+  
+  // Modelos GPT-3.5
+  { id: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo', description: 'Rápido e econômico', contextWindow: 16385, maxOutputTokens: 2048 },
+  { id: 'gpt-3.5-turbo-16k', name: 'GPT-3.5 Turbo 16K', description: 'Contexto ampliado', contextWindow: 16385, maxOutputTokens: 2048 }
 ];
 
 // Ferramentas disponíveis
@@ -81,28 +93,42 @@ const AVAILABLE_TOOLS = [
     name: 'Interpretador de Código', 
     description: 'Executa código Python para análises e cálculos',
     type: 'code_interpreter',
-    models: ['gpt-4', 'gpt-4-turbo', 'gpt-4-32k', 'gpt-4o'] 
+    models: ['gpt-4', 'gpt-4-turbo', 'gpt-4-32k', 'gpt-4o', 'gpt-4o-mini', 'gpt-4-1106-preview', 'gpt-4.1', 'gpt-4.5', 'gpt-o3'] 
   },
   { 
     id: 'retrieval', 
     name: 'Recuperação de Conhecimento', 
     description: 'Pesquisa informações em arquivos anexados',
     type: 'retrieval',
-    models: ['gpt-3.5-turbo', 'gpt-3.5-turbo-16k', 'gpt-4', 'gpt-4-turbo', 'gpt-4-32k', 'gpt-4o'] 
+    models: ['gpt-3.5-turbo', 'gpt-3.5-turbo-16k', 'gpt-4', 'gpt-4-turbo', 'gpt-4-32k', 'gpt-4o', 'gpt-4o-mini', 'gpt-4-1106-preview', 'gpt-4.1', 'gpt-4.5', 'gpt-o3'] 
   },
   { 
     id: 'web_browsing', 
     name: 'Navegação Web', 
     description: 'Acessa e resume conteúdo da web',
     type: 'web_browsing',
-    models: ['gpt-4', 'gpt-4-turbo', 'gpt-4-32k', 'gpt-4o'] 
+    models: ['gpt-4', 'gpt-4-turbo', 'gpt-4-32k', 'gpt-4o', 'gpt-4o-mini', 'gpt-4-1106-preview', 'gpt-4.1', 'gpt-4.5', 'gpt-o3'] 
   },
   { 
     id: 'function_calling', 
     name: 'Chamada de Funções', 
     description: 'Estrutura dados para integração com APIs',
     type: 'function',
-    models: ['gpt-3.5-turbo', 'gpt-3.5-turbo-16k', 'gpt-4', 'gpt-4-turbo', 'gpt-4-32k', 'gpt-4o'] 
+    models: ['gpt-3.5-turbo', 'gpt-3.5-turbo-16k', 'gpt-4', 'gpt-4-turbo', 'gpt-4-32k', 'gpt-4o', 'gpt-4o-mini', 'gpt-4-1106-preview', 'gpt-4.1', 'gpt-4.5', 'gpt-o3'] 
+  },
+  {
+    id: 'vision',
+    name: 'Visão Computacional', 
+    description: 'Processa e analisa imagens e vídeos',
+    type: 'vision',
+    models: ['gpt-4o', 'gpt-4.1', 'gpt-4.5', 'gpt-o3']
+  },
+  {
+    id: 'advanced_reasoning',
+    name: 'Raciocínio Avançado', 
+    description: 'Capacidades avançadas de raciocínio e planejamento',
+    type: 'advanced_reasoning',
+    models: ['gpt-4.1', 'gpt-4.5', 'gpt-o3']
   }
 ];
 
@@ -169,6 +195,8 @@ const PromptChat = () => {
       try {
         const preset = presets.find(p => p.id === id);
         if (preset) {
+          console.log('Carregando preset:', preset.name);
+          
           // Atualizar o preset atual
           setCurrentPreset(preset);
           
@@ -176,7 +204,11 @@ const PromptChat = () => {
           setSelectedModel(preset.model || 'gpt-3.5-turbo');
           setSystemPrompt(preset.systemPrompt || '');
           setTemperature(preset.temperature || 0.7);
-          setMaxTokens(preset.maxTokens || 2048);
+          
+          // Ajustar tokens máximos considerando o limite do modelo
+          const modelMax = AVAILABLE_MODELS.find(m => m.id === preset.model)?.maxOutputTokens || 4096;
+          setMaxTokens(Math.min(preset.maxTokens || 2048, modelMax));
+          
           setSelectedTools(preset.tools || []);
           
           // Se o preset tem uma conversa salva
@@ -189,29 +221,50 @@ const PromptChat = () => {
               conversation.reset(preset.systemPrompt || '');
             }
             return;
+          } else {
+            // Inicializar nova conversa com o system prompt do preset
+            conversation.reset(preset.systemPrompt || '');
           }
         } else {
           setCurrentPreset(null);
+          conversation.reset(systemPrompt);
         }
       } catch (e) {
         console.error('Error loading preset:', e);
         setCurrentPreset(null);
+        conversation.reset(systemPrompt);
       }
     } else {
       // Se estamos no chat padrão
       setCurrentPreset(null);
+      
+      // Carregamento padrão se não for um preset ou se o preset não tiver conversa
+      const loaded = conversation.load(chatId);
+      
+      if (loaded) {
+        loadConversationToUI(conversation);
+      } else {
+        // Inicializar nova conversa com o system prompt
+        conversation.reset(systemPrompt);
+      }
     }
-    
-    // Carregamento padrão se não for um preset ou se o preset não tiver conversa
-    const loaded = conversation.load(chatId);
-    
-    if (loaded) {
-      loadConversationToUI(conversation);
-    } else {
-      // Inicializar nova conversa com o system prompt
+  }, [id, presets]);
+  
+  // Efeito separado para atualizar o system prompt quando ele é alterado
+  useEffect(() => {
+    // Só reinicia a conversa se já houver mensagens
+    if (messages.length > 0) {
+      console.log('Reiniciando conversa com novo system prompt');
+      const conversation = conversationRef.current;
       conversation.reset(systemPrompt);
+      setMessages([]);
+      
+      setSnackbar({
+        open: true,
+        message: 'Conversa reiniciada com o novo system prompt'
+      });
     }
-  }, [id, systemPrompt, presets]);
+  }, [systemPrompt]);
   
   // Função auxiliar para carregar conversa para a UI
   const loadConversationToUI = (conversation) => {
@@ -885,8 +938,7 @@ const PromptChat = () => {
       flexDirection: 'column',
       position: 'relative',
       bgcolor: 'background.default',
-      border: '2px solid #10a37f',
-      borderRadius: 2,
+      borderRadius: 1,
       overflow: 'hidden'
     }}>
       {/* Banner de instruções */}
@@ -1425,12 +1477,48 @@ const PromptChat = () => {
               label="System Prompt"
               fullWidth
               multiline
-              rows={4}
+              rows={6}
               value={systemPrompt}
               onChange={(e) => setSystemPrompt(e.target.value)}
               helperText="Este prompt define como o assistente deve se comportar. Alterar isso reiniciará a conversa."
               sx={{ mb: 3 }}
+              InputProps={{
+                sx: { fontSize: '0.9rem' }
+              }}
+              variant="outlined"
             />
+            
+            {/* Botões de modelos de system prompts */}
+            <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 2 }}>
+              <Button 
+                size="small" 
+                variant="outlined" 
+                onClick={() => setSystemPrompt("You are a helpful assistant. Answer questions clearly and concisely.")}
+              >
+                Assistente Geral
+              </Button>
+              <Button 
+                size="small" 
+                variant="outlined" 
+                onClick={() => setSystemPrompt("You are a programming expert. Help with code, explain concepts clearly, and suggest best practices.")}
+              >
+                Programação
+              </Button>
+              <Button 
+                size="small" 
+                variant="outlined" 
+                onClick={() => setSystemPrompt("You are a data analysis expert. Help analyze datasets, explain statistical concepts, and suggest visualization techniques.")}
+              >
+                Análise de Dados
+              </Button>
+              <Button 
+                size="small" 
+                variant="outlined" 
+                onClick={() => setSystemPrompt("You are a creative writing assistant. Help brainstorm ideas, develop characters, and improve storytelling.")}
+              >
+                Criatividade
+              </Button>
+            </Box>
             
             {/* Ferramentas */}
             <Typography variant="subtitle1" gutterBottom>
@@ -1509,20 +1597,44 @@ const PromptChat = () => {
               <Typography variant="body2" gutterBottom>
                 Tamanho máximo da resposta: {maxTokens.toLocaleString()} tokens
               </Typography>
-              <Slider
-                value={maxTokens}
-                onChange={(e, newValue) => setMaxTokens(newValue)}
-                min={256}
-                max={4096}
-                step={256}
-                marks={[
+              
+              {/* Obtém o máximo para o modelo atual */}
+              {(() => {
+                const currentModel = AVAILABLE_MODELS.find(m => m.id === selectedModel);
+                const maxLimit = currentModel?.maxOutputTokens || 4096;
+                const steps = [
                   { value: 256, label: '256' },
                   { value: 1024, label: '1K' },
                   { value: 2048, label: '2K' },
                   { value: 4096, label: '4K' }
-                ]}
-                valueLabelDisplay="auto"
-              />
+                ];
+                
+                // Adicionar marcadores para limites maiores
+                if (maxLimit >= 8192) steps.push({ value: 8192, label: '8K' });
+                if (maxLimit >= 16384) steps.push({ value: 16384, label: '16K' });
+                if (maxLimit >= 32768) steps.push({ value: 32768, label: '32K' });
+                
+                // Ajustar valor se o limite selecionado excede o máximo do modelo
+                if (maxTokens > maxLimit) {
+                  setTimeout(() => setMaxTokens(maxLimit), 0);
+                }
+                
+                return (
+                  <Slider
+                    value={Math.min(maxTokens, maxLimit)}
+                    onChange={(e, newValue) => setMaxTokens(newValue)}
+                    min={256}
+                    max={maxLimit}
+                    step={maxLimit <= 4096 ? 256 : 1024}
+                    marks={steps.filter(s => s.value <= maxLimit)}
+                    valueLabelDisplay="auto"
+                  />
+                );
+              })()}
+              
+              <Typography variant="caption" color="text.secondary">
+                Limite máximo específico para {AVAILABLE_MODELS.find(m => m.id === selectedModel)?.name}: {AVAILABLE_MODELS.find(m => m.id === selectedModel)?.maxOutputTokens.toLocaleString()} tokens
+              </Typography>
             </Box>
           </Box>
           
