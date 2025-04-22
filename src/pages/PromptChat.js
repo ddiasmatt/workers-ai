@@ -66,16 +66,22 @@ import {
 
 // Modelos disponíveis
 const AVAILABLE_MODELS = [
-  // Novos modelos (últimos lançamentos)
-  { id: 'gpt-o3', name: 'GPT-o3 🔥', description: 'Novo modelo otimizado com funções avançadas', contextWindow: 256000, maxOutputTokens: 32768 },
-  { id: 'gpt-4.5', name: 'GPT-4.5 🔥', description: 'Melhor conhecimento e capacidades de linguagem', contextWindow: 256000, maxOutputTokens: 16384 },
-  { id: 'gpt-4.1', name: 'GPT-4.1 🔥', description: 'Modelo avançado com melhor raciocínio', contextWindow: 32768, maxOutputTokens: 8192 },
+  // Novos modelos GPT-4.1 (Maio 2024)
+  { id: 'gpt-4.1', name: 'GPT-4.1 🔥', description: 'Nova geração de modelos avançados', contextWindow: 1047576, maxOutputTokens: 32768 },
+  { id: 'gpt-4.1-mini', name: 'GPT-4.1 Mini 🔥', description: 'Versão mais econômica do GPT-4.1', contextWindow: 1047576, maxOutputTokens: 32768 },
+  { id: 'gpt-4.1-nano', name: 'GPT-4.1 Nano 🔥', description: 'Modelo mais econômico da OpenAI', contextWindow: 1047576, maxOutputTokens: 32768 },
   
-  // Modelos recentes
+  // Outros modelos recentes
+  { id: 'gpt-o3', name: 'GPT-o3', description: 'Modelo otimizado com funções avançadas', contextWindow: 256000, maxOutputTokens: 32768 },
+  { id: 'gpt-4.5', name: 'GPT-4.5', description: 'Alto desempenho em tarefas complexas', contextWindow: 256000, maxOutputTokens: 16384 },
+  
+  // Modelos da família GPT-4o
   { id: 'gpt-4o', name: 'GPT-4o', description: 'Performance multimodal otimizada', contextWindow: 128000, maxOutputTokens: 4096 },
-  { id: 'gpt-4o-mini', name: 'GPT-4o Mini', description: 'Versão mais rápida e econômica do GPT-4o', contextWindow: 128000, maxOutputTokens: 4096 },
-  { id: 'gpt-4-1106-preview', name: 'GPT-4 Turbo Preview', description: 'Versão prévia com conhecimento mais recente', contextWindow: 128000, maxOutputTokens: 4096 },
+  { id: 'gpt-4o-mini', name: 'GPT-4o Mini', description: 'Versão mais econômica do GPT-4o', contextWindow: 128000, maxOutputTokens: 4096 },
+  
+  // Modelos GPT-4 Turbo
   { id: 'gpt-4-turbo', name: 'GPT-4 Turbo', description: 'GPT-4 otimizado para performance', contextWindow: 128000, maxOutputTokens: 4096 },
+  { id: 'gpt-4-1106-preview', name: 'GPT-4 Turbo Preview', description: 'Versão prévia com conhecimento mais recente', contextWindow: 128000, maxOutputTokens: 4096 },
   
   // Modelos anteriores GPT-4
   { id: 'gpt-4', name: 'GPT-4', description: 'Preciso e confiável', contextWindow: 8192, maxOutputTokens: 2048 },
@@ -93,42 +99,56 @@ const AVAILABLE_TOOLS = [
     name: 'Interpretador de Código', 
     description: 'Executa código Python para análises e cálculos',
     type: 'code_interpreter',
-    models: ['gpt-4', 'gpt-4-turbo', 'gpt-4-32k', 'gpt-4o', 'gpt-4o-mini', 'gpt-4-1106-preview', 'gpt-4.1', 'gpt-4.5', 'gpt-o3'] 
+    models: ['gpt-4', 'gpt-4-turbo', 'gpt-4-32k', 'gpt-4o', 'gpt-4o-mini', 'gpt-4-1106-preview', 'gpt-4.1', 'gpt-4.1-mini', 'gpt-4.1-nano', 'gpt-4.5', 'gpt-o3'] 
   },
   { 
     id: 'retrieval', 
     name: 'Recuperação de Conhecimento', 
     description: 'Pesquisa informações em arquivos anexados',
     type: 'retrieval',
-    models: ['gpt-3.5-turbo', 'gpt-3.5-turbo-16k', 'gpt-4', 'gpt-4-turbo', 'gpt-4-32k', 'gpt-4o', 'gpt-4o-mini', 'gpt-4-1106-preview', 'gpt-4.1', 'gpt-4.5', 'gpt-o3'] 
+    models: ['gpt-3.5-turbo', 'gpt-3.5-turbo-16k', 'gpt-4', 'gpt-4-turbo', 'gpt-4-32k', 'gpt-4o', 'gpt-4o-mini', 'gpt-4-1106-preview', 'gpt-4.1', 'gpt-4.1-mini', 'gpt-4.1-nano', 'gpt-4.5', 'gpt-o3'] 
   },
   { 
     id: 'web_browsing', 
     name: 'Navegação Web', 
     description: 'Acessa e resume conteúdo da web',
     type: 'web_browsing',
-    models: ['gpt-4', 'gpt-4-turbo', 'gpt-4-32k', 'gpt-4o', 'gpt-4o-mini', 'gpt-4-1106-preview', 'gpt-4.1', 'gpt-4.5', 'gpt-o3'] 
+    models: ['gpt-4', 'gpt-4-turbo', 'gpt-4-32k', 'gpt-4o', 'gpt-4o-mini', 'gpt-4-1106-preview', 'gpt-4.1', 'gpt-4.1-mini', 'gpt-4.1-nano', 'gpt-4.5', 'gpt-o3'] 
   },
   { 
     id: 'function_calling', 
     name: 'Chamada de Funções', 
     description: 'Estrutura dados para integração com APIs',
     type: 'function',
-    models: ['gpt-3.5-turbo', 'gpt-3.5-turbo-16k', 'gpt-4', 'gpt-4-turbo', 'gpt-4-32k', 'gpt-4o', 'gpt-4o-mini', 'gpt-4-1106-preview', 'gpt-4.1', 'gpt-4.5', 'gpt-o3'] 
+    models: ['gpt-3.5-turbo', 'gpt-3.5-turbo-16k', 'gpt-4', 'gpt-4-turbo', 'gpt-4-32k', 'gpt-4o', 'gpt-4o-mini', 'gpt-4-1106-preview', 'gpt-4.1', 'gpt-4.1-mini', 'gpt-4.1-nano', 'gpt-4.5', 'gpt-o3'] 
   },
   {
     id: 'vision',
     name: 'Visão Computacional', 
     description: 'Processa e analisa imagens e vídeos',
     type: 'vision',
-    models: ['gpt-4o', 'gpt-4.1', 'gpt-4.5', 'gpt-o3']
+    models: ['gpt-4o', 'gpt-4.1', 'gpt-4.1-mini', 'gpt-4.1-nano', 'gpt-4.5', 'gpt-o3']
   },
   {
     id: 'advanced_reasoning',
     name: 'Raciocínio Avançado', 
-    description: 'Capacidades avançadas de raciocínio e planejamento',
+    description: 'Capacidades avançadas para seguir instruções específicas',
     type: 'advanced_reasoning',
-    models: ['gpt-4.1', 'gpt-4.5', 'gpt-o3']
+    models: ['gpt-4.1', 'gpt-4.1-mini', 'gpt-4.1-nano', 'gpt-4.5', 'gpt-o3']
+  },
+  {
+    id: 'coding',
+    name: 'Especialista em Código', 
+    description: 'Performance superior em benchmarks de programação',
+    type: 'coding',
+    models: ['gpt-4.1', 'gpt-4.1-mini', 'gpt-4.1-nano']
+  },
+  {
+    id: 'long_context',
+    name: 'Contexto Longo', 
+    description: 'Capacidade de lidar com 1M+ tokens de entrada',
+    type: 'long_context',
+    models: ['gpt-4.1', 'gpt-4.1-mini', 'gpt-4.1-nano']
   }
 ];
 
