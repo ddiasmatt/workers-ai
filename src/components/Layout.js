@@ -1,12 +1,8 @@
-import React, { useContext } from 'react';
-import { Box, Button, Container, Tooltip } from '@mui/material';
+import React from 'react';
+import { Box, Container } from '@mui/material';
 import Sidebar from './Sidebar';
-import { ApiKeyContext } from '../App';
-import KeyIcon from '@mui/icons-material/Key';
 
 const Layout = ({ children }) => {
-  const { openApiKeyDialog, isApiKeySet } = useContext(ApiKeyContext);
-
   return (
     <Box sx={{ display: 'flex', height: '100vh' }}>
       <Sidebar />

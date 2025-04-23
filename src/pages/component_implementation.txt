@@ -1,0 +1,2043 @@
+
+const PromptChat = () => {
+  const { id } = useParams(); // ID usado para identificar a conversa no localStorage
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const { addToHistory } = useContext(ChatHistoryContext);
+  
+  // Estados para controle da interface
+  const [input, setInput] = useState('');
+  const [messages, setMessages] = useState([]);
+  const [isTyping, setIsTyping] = useState(false);
+  const [activeRunId, setActiveRunId] = useState(null);
+  const [error, setError] = useState(null);
+  const [snackbar, setSnackbar] = useState({ open: false, message: '' });
+  const [uploadingFile, setUploadingFile] = useState(false);
+  const [attachedFile, setAttachedFile] = useState(null);
+  const [isResettingThread, setIsResettingThread] = useState(false);
+  const [confirmResetOpen, setConfirmResetOpen] = useState(false);
+  const [selectedModel, setSelectedModel] = useState('gpt-4.1');
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [savePresetOpen, setPresetSaveOpen] = useState(false);
+  const [presetName, setPresetName] = useState('');
+  const [presets, setPresets] = useState([]);
+  const [temperature, setTemperature] = useState(0.7);
+  const [maxTokens, setMaxTokens] = useState(2048);
+  const [systemPrompt, setSystemPrompt] = useState(() => {
+    // Tentar carregar o system prompt salvo do localStorage
+    const savedPrompt = localStorage.getItem('default_system_prompt');
+    return savedPrompt || 'You are a helpful assistant. When asked about your version, make it clear which model you are running on. Answer questions clearly and concisely.';
+  });
+  const [selectedTools, setSelectedTools] = useState([]);
+  
+  // Estados para gerenciamento de presets
+  const [presetManagerOpen, setPresetManagerOpen] = useState(false);
+  const [presetToEdit, setPresetToEdit] = useState(null);
+  const [presetToDelete, setPresetToDelete] = useState(null);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const [presetAnchorEl, setPresetAnchorEl] = useState(null);
+  const [currentPreset, setCurrentPreset] = useState(null);
+  const [presetAttachedFiles, setPresetAttachedFiles] = useState([]);
+  const [uploadingPresetFile, setUploadingPresetFile] = useState(false);
+  
+  // Referências
+  const fileInputRef = useRef(null);
+  const presetFileInputRef = useRef(null);
+  const messagesEndRef = useRef(null);
+  const conversationRef = useRef(new ConversationManager(systemPrompt));
+  
+  // Carregar presets salvos
+  useEffect(() => {
+    try {
+      const savedPresets = localStorage.getItem('chat_presets');
+      if (savedPresets) {
+        setPresets(JSON.parse(savedPresets));
+      }
+    } catch (e) {
+      console.error('Error loading presets:', e);
+    }
+  }, []);
+  
+  // Verificar se deve abrir diretamente as configurações ou diálogo de salvar worker
+  useEffect(() => {
+    const shouldOpenSettings = searchParams.get('openSettings') === 'true';
+    const shouldCreateWorker = searchParams.get('createWorker') === 'true';
+    
+    if (shouldOpenSettings || shouldCreateWorker) {
+      // Usar setTimeout para garantir que o preset tenha sido carregado
+      setTimeout(() => {
+        // Abrir as configurações
+        setSettingsOpen(true);
+        
+        // Se for para criar um worker, abrir também o diálogo de salvar preset após um tempo
+        if (shouldCreateWorker) {
+          setTimeout(() => {
+            handleOpenSavePreset();
+          }, 500);
+        }
+      }, 300);
+      
+      // Limpar o parâmetro da URL para não reabrir as configurações ao recarregar
+      const newUrl = window.location.pathname;
+      navigate(newUrl, { replace: true });
+    }
+  }, [searchParams, navigate]);
+  
+  // Obter ChatHistory do contexto
+  const { chatHistory } = useContext(ChatHistoryContext);
+
+  // Inicializar ou carregar conversa
+  useEffect(() => {
+    console.log('Iniciando carregamento de conversa, ID:', id);
+    const conversation = conversationRef.current;
+    
+    // Limpar mensagens para evitar flash de conteúdo antigo
+    setMessages([]);
+    
+    // Verificar se o ID é um preset ou uma conversa vinculada a um preset
+    if (id) {
+      // Tenta carregar configurações do preset
+      try {
+        const preset = presets.find(p => p.id === id);
+        if (preset) {
+          console.log('Carregando worker:', preset.name);
+          
+          // Atualizar o preset atual
+          setCurrentPreset(preset);
+          
+          // Aplicar configurações do preset
+          setSelectedModel('gpt-4.1'); // Usar sempre GPT-4.1 como modelo padrão
+          setSystemPrompt(preset.systemPrompt || '');
+          setTemperature(preset.temperature || 0.7);
+          
+          // Ajustar tokens máximos considerando o limite do modelo
+          const modelMax = AVAILABLE_MODELS.find(m => m.id === preset.model)?.maxOutputTokens || 4096;
+          setMaxTokens(Math.min(preset.maxTokens || 2048, modelMax));
+          
+          setSelectedTools(preset.tools || []);
+          
+          // Carregar arquivos anexados se existirem
+          setPresetAttachedFiles(preset.attachedFiles || []);
+          
+          // Verificar se estamos criando uma nova conversa
+          const searchParams = new URLSearchParams(window.location.search);
+          const isNewChat = searchParams.get('new') === 'true';
+          const forceNewChat = searchParams.get('forcenew') === 'true';
+          
+          // Se é uma solicitação para nova conversa
+          if (isNewChat) {
+            // Se não estiver forçando nova conversa, verificar se já existe uma conversa ativa com este worker
+            if (!forceNewChat) {
+              const existingChats = chatHistory.filter(chat => 
+                chat.workerId === preset.id && 
+                chat.messageCount > 0 // Verificar se possui mensagens
+              );
+              
+              if (existingChats.length > 0) {
+                // Ordenar por data de última atividade (mais recente primeiro)
+                existingChats.sort((a, b) => new Date(b.lastActivity) - new Date(a.lastActivity));
+                
+                // Redirecionar para a conversa existente mais recente
+                const latestChat = existingChats[0];
+                console.log('Conversa existente encontrada, redirecionando para:', latestChat.id);
+                
+                // Atualizar a URL sem recarregar a página
+                window.history.replaceState(null, '', `/prompt-chat/${latestChat.id}`);
+                
+                // Carregar a conversa existente
+                const loaded = conversation.load(latestChat.id);
+                if (loaded) {
+                  console.log('Conversa carregada com sucesso');
+                  loadConversationToUI(conversation);
+                  
+                  setSnackbar({
+                    open: true,
+                    message: `Usando conversa existente com o worker "${preset.name}"`
+                  });
+                  
+                  return; // Importante: sair do fluxo de carregamento
+                }
+              }
+            }
+            
+            // Se não existe uma conversa ou se não conseguiu carregar, criar uma nova
+            const newChatId = `${preset.id}_chat_${Date.now()}`;
+            
+            // Atualizar a URL sem recarregar a página
+            window.history.replaceState(null, '', `/prompt-chat/${newChatId}`);
+            
+            // Iniciar nova conversa com o system prompt do worker
+            conversation.reset(preset.systemPrompt || '');
+            console.log('Iniciando nova conversa com ID:', newChatId);
+            
+            // Usar sempre o modelo GPT-4.1
+            const modelInfo = AVAILABLE_MODELS[0]; // Apenas GPT-4.1 está disponível
+            
+            // Notificar o usuário sobre o modelo que será usado
+            setSnackbar({
+              open: true,
+              message: `Usando ${modelInfo.name} (${modelInfo.id}) para esta conversa`
+            });
+            
+            // Processar arquivos anexados ao worker, se existirem
+            if (preset.attachedFiles && preset.attachedFiles.length > 0) {
+              console.log(`Worker tem ${preset.attachedFiles.length} arquivos anexados, processando...`);
+              
+              // Adicionar mensagem ao sistema informando sobre os arquivos
+              const filesList = preset.attachedFiles.map(file => file.name).join(", ");
+              const filesMessage = `O worker "${preset.name}" tem os seguintes arquivos anexados para referência: ${filesList}`;
+              conversation.addMessage('system', filesMessage);
+              
+              // Para cada arquivo anexado, tentar recuperar conteúdo e adicionar ao contexto
+              preset.attachedFiles.forEach(async (file) => {
+                try {
+                  if (file.id) {
+                    const fileContent = await retrieveFileContent(file.id);
+                    const fileContextMsg = `Conteúdo do arquivo anexado "${file.name}":\n${JSON.stringify(fileContent.content)}`;
+                    conversation.addMessage('system', fileContextMsg);
+                    
+                    // Salvar a conversa com o contexto dos arquivos
+                    conversation.save(newChatId);
+                    console.log(`Arquivo ${file.name} processado e adicionado ao contexto`);
+                  }
+                } catch (err) {
+                  console.error(`Erro ao processar arquivo ${file.name}:`, err);
+                }
+              });
+            }
+            
+            // Adicionar ao histórico imediatamente para atualizar a barra lateral
+            addToHistory({
+              id: newChatId,
+              title: 'Nova conversa com ' + preset.name,
+              messageCount: 0,
+              modelInfo: 'gpt-4.1', // Sempre usar GPT-4.1
+              isPreset: true,
+              workerId: preset.id
+            });
+            
+          // Se não é uma nova conversa, verificar se é uma conversa existente
+          } else if (localStorage.getItem(`conversation_${id}`)) {
+            console.log('Tentando carregar conversa existente:', id);
+            const loaded = conversation.load(id);
+            if (loaded) {
+              console.log('Conversa carregada com sucesso');
+              loadConversationToUI(conversation);
+              
+              // Verificar se os arquivos anexados já foram adicionados ao contexto
+              const hasAttachedFilesContext = conversation.getHistory().some(msg => 
+                msg.role === 'system' && msg.content.includes('arquivos anexados para referência')
+              );
+              
+              // Adicionar informação sobre arquivos anexados ao worker se necessário
+              if (!hasAttachedFilesContext && preset.attachedFiles && preset.attachedFiles.length > 0) {
+                console.log(`Adicionando informações sobre ${preset.attachedFiles.length} arquivos anexados à conversa existente`);
+                
+                // Adicionar mensagem ao sistema informando sobre os arquivos
+                const filesList = preset.attachedFiles.map(file => file.name).join(", ");
+                const filesMessage = `O worker "${preset.name}" tem os seguintes arquivos anexados para referência: ${filesList}`;
+                conversation.addMessage('system', filesMessage);
+                
+                // Salvar a conversa com a informação atualizada
+                conversation.save(id);
+              }
+            } else {
+              console.warn('Falha ao carregar conversa, iniciando nova');
+              conversation.reset(preset.systemPrompt || '');
+            }
+          // Caso não seja nem nova nem existente (primeira vez acessando este worker)
+          } else {
+            console.log('Nenhuma conversa existente, criando primeira conversa com ID:', id);
+            conversation.reset(preset.systemPrompt || '');
+          }
+        } else {
+          console.log('ID não corresponde a nenhum preset, tentando carregar como conversa normal:', id);
+          setCurrentPreset(null);
+          
+          // Tentar carregar como conversa normal
+          const loaded = conversation.load(id);
+          if (loaded) {
+            console.log('Conversa normal carregada com sucesso');
+            loadConversationToUI(conversation);
+          } else {
+            console.warn('Falha ao carregar conversa normal, iniciando nova conversa');
+            conversation.reset(systemPrompt);
+          }
+        }
+      } catch (e) {
+        console.error('Error loading preset or conversation:', e);
+        setCurrentPreset(null);
+        conversation.reset(systemPrompt);
+      }
+    } else {
+      // Se não temos um ID válido, redirecionar para a página inicial
+      console.log('ID de conversa inválido, redirecionando para a página inicial');
+      navigate('/');
+    }
+  }, [id, presets, chatHistory]);
+  
+  // Estado para controlar quando o system prompt foi alterado manualmente
+  const [manualSystemPromptChange, setManualSystemPromptChange] = useState(false);
+  
+  // Efeito separado para atualizar o system prompt quando ele é alterado manualmente
+  useEffect(() => {
+    // Só reinicia a conversa se houve alteração manual e já existem mensagens
+    if (manualSystemPromptChange && messages.length > 0) {
+      console.log('Reiniciando conversa com novo system prompt (alteração manual)');
+      const conversation = conversationRef.current;
+      conversation.reset(systemPrompt);
+      setMessages([]);
+      
+      setSnackbar({
+        open: true,
+        message: 'Conversa reiniciada com o novo system prompt'
+      });
+      
+      // Resetar flag após processar
+      setManualSystemPromptChange(false);
+    }
+  }, [manualSystemPromptChange, messages.length, systemPrompt]);
+  
+  // Não precisamos mais desativar ferramentas para GPT-4.1
+  // Todas as ferramentas estão disponíveis para todos os modelos agora
+  
+  // Função auxiliar para carregar conversa para a UI
+  const loadConversationToUI = (conversation) => {
+    // Converter o histórico para o formato de mensagens da UI
+    const uiMessages = conversation.getHistory().map(msg => ({
+      role: msg.role,
+      content: msg.content,
+      // Usar o timestamp original ou criar um novo se não existir
+      timestamp: msg.timestamp || new Date().toISOString(),
+      // Preservar arquivo anexado se existir
+      ...(msg.attachedFile ? { attachedFile: msg.attachedFile } : {})
+    }));
+    
+    // Debug para verificação
+    console.log('Carregando mensagens com timestamps:', uiMessages);
+    
+    // Filtrar mensagens de sistema que não queremos mostrar na UI
+    const visibleMessages = uiMessages.filter(msg => msg.role !== 'system');
+    setMessages(visibleMessages);
+    
+    // Recuperar o system prompt se existir e não estivermos usando um preset
+    if (!currentPreset) {
+      const systemMessage = conversation.getHistory().find(msg => msg.role === 'system');
+      if (systemMessage) {
+        setSystemPrompt(systemMessage.content);
+      }
+    }
+  };
+  
+  // Estado para controlar se deve rolar automaticamente
+  const [shouldScrollToBottom, setShouldScrollToBottom] = useState(true);
+  const [isUserScrolling, setIsUserScrolling] = useState(false);
+  
+  // Detectar quando o usuário está rolando manualmente
+  const handleScroll = (e) => {
+    const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
+    const isAtBottom = scrollHeight - scrollTop - clientHeight < 100;
+    
+    // Se o usuário estiver rolando manualmente (não causado pelo auto-scroll)
+    if (!isUserScrolling) {
+      setIsUserScrolling(true);
+      setShouldScrollToBottom(isAtBottom);
+      
+      // Resetar após 1 segundo sem rolagem
+      setTimeout(() => {
+        setIsUserScrolling(false);
+      }, 1000);
+    }
+  };
+  
+  // Rolar para a última mensagem apenas quando necessário
+  useEffect(() => {
+    // Só rolar automaticamente se o usuário estiver no final da conversa ou se for uma nova mensagem
+    if (shouldScrollToBottom && !isUserScrolling) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages, shouldScrollToBottom]);
+  
+  // Enviar mensagem
+  const handleSendMessage = async (e) => {
+    e.preventDefault();
+    if ((!input.trim() && !attachedFile) || isTyping || activeRunId) return;
+    
+    if (!hasApiKey()) {
+      setSnackbar({
+        open: true,
+        message: 'Por favor, configure sua chave de API da OpenAI primeiro.'
+      });
+      return;
+    }
+    
+    const userContent = input.trim();
+    setInput('');
+    
+    // Construir a mensagem do usuário para a UI
+    const userMessage = {
+      role: 'user',
+      content: userContent,
+      timestamp: new Date().toISOString(),
+      ...(attachedFile ? { attachedFile } : {})
+    };
+    
+    // Limpar arquivo anexado
+    const fileToProcess = attachedFile;
+    setAttachedFile(null);
+    
+    // Adicionar mensagem do usuário à UI e uma mensagem temporária do assistente
+    setMessages(prev => [
+      ...prev, 
+      userMessage,
+      {
+        role: 'assistant',
+        content: 'Pensando...',
+        timestamp: new Date().toISOString(),
+        isStreaming: true,
+        isThinking: true
+      }
+    ]);
+    
+    setIsTyping(true);
+    setError(null);
+    
+    // Variável para armazenar conteúdo final do usuário
+    let finalUserContent = userContent;
+      
+    // Processar arquivo anexado se existir  
+    if (fileToProcess) {
+      try {
+        // Adicionar informações sobre o arquivo na mensagem para a UI
+        finalUserContent = userContent ? 
+          `${userContent}\n\n[Arquivo anexado: ${fileToProcess.name}]` : 
+          `[Arquivo anexado: ${fileToProcess.name}]`;
+        
+        // Se temos um ID de arquivo, tentar recuperar seu conteúdo
+        if (fileToProcess.id) {
+          try {
+            const fileContent = await retrieveFileContent(fileToProcess.id);
+            
+            // Adicionar conteúdo do arquivo como contexto
+            const fileContextMsg = `File content:\n${JSON.stringify(fileContent.content)}`;
+            
+            // Adicionar ao histórico, mas não mostrar na UI
+            conversationRef.current.addMessage('user', fileContextMsg);
+          } catch (fileErr) {
+            console.warn('Could not retrieve file content, continuing with standard message', fileErr);
+          }
+        }
+      } catch (fileErr) {
+        console.error('Error processing file:', fileErr);
+      }
+    }
+    
+    // Verificar se estamos usando um worker com arquivos anexados
+    const currentChatId = window.location.pathname.split('/').pop();
+    const isWorkerChat = currentChatId.includes('_chat_');
+    
+    if (isWorkerChat && !fileToProcess) {
+      const workerId = currentChatId.split('_chat_')[0];
+      const currentWorker = presets.find(p => p.id === workerId);
+      
+      // Se o worker tem arquivos anexados, mencioná-los em cada mensagem do usuário
+      if (currentWorker?.attachedFiles && currentWorker.attachedFiles.length > 0) {
+        const fileNames = currentWorker.attachedFiles.map(f => f.name).join(", ");
+          
+        // Checar se é a primeira mensagem do usuário
+        const isFirstMessage = messages.filter(m => m.role === 'user').length === 0;
+        
+        // Checar se o conteúdo do arquivo já está no histórico
+        const hasFileContent = conversationRef.current.getHistory().some(msg => 
+          msg.content && msg.content.includes('Conteúdo recuperado do arquivo anexado')
+        );
+        
+        // Se for a primeira mensagem e o conteúdo ainda não estiver no histórico, buscamos os arquivos
+        if (isFirstMessage && !hasFileContent) {
+          // Buscar conteúdo dos arquivos anexados
+          setSnackbar({
+            open: true,
+            message: 'Carregando conteúdo dos arquivos anexados...'
+          });
+          
+          // Para cada arquivo anexado, tentar recuperar conteúdo e adicionar ao contexto
+          const filePromises = currentWorker.attachedFiles.map(async (file) => {
+            try {
+              if (file.id) {
+                const fileContent = await retrieveFileContent(file.id);
+                const content = typeof fileContent.content === 'string' 
+                  ? fileContent.content.substring(0, 500) + (fileContent.content.length > 500 ? '...' : '')
+                  : JSON.stringify(fileContent.content).substring(0, 500) + '...';
+                
+                const fileContextMsg = `Conteúdo recuperado do arquivo anexado "${file.name}":\n${content}`;
+                conversationRef.current.addMessage('system', fileContextMsg);
+                return file.name;
+              }
+            } catch (err) {
+              console.error(`Erro ao processar arquivo ${file.name}:`, err);
+              return null;
+            }
+          });
+          
+          // Esperar que todos os arquivos sejam processados
+          Promise.all(filePromises).then(results => {
+            const loadedFiles = results.filter(Boolean);
+            if (loadedFiles.length > 0) {
+              console.log(`Conteúdo carregado de ${loadedFiles.length} arquivos`);
+              // Salvar a conversa com o conteúdo dos arquivos
+              conversationRef.current.save(currentChatId);
+              
+              setSnackbar({
+                open: true,
+                message: `Conteúdo de ${loadedFiles.length} arquivos carregado com sucesso`
+              });
+            }
+          });
+        }
+        
+        if (isFirstMessage) {
+          // Na primeira mensagem, damos mais contexto
+          finalUserContent += `\n\nOs seguintes arquivos foram anexados a este worker e estão disponíveis para sua consulta: ${fileNames}.\nUtilize as informações contidas nestes arquivos para responder às minhas perguntas, quando relevante.`;
+        } else {
+          // Nas mensagens subsequentes, apenas lembramos da existência dos arquivos
+          finalUserContent += `\n\nLembre-se que você tem acesso aos seguintes arquivos para referência: ${fileNames}`;
+      }
+    }
+    
+    // Iniciar streaming da resposta
+    let currentAssistantMessage = '';
+    
+    try {
+      // Preparar opções adicionais com base nas ferramentas selecionadas
+      const apiOptions = {
+        temperature: temperature,
+        max_tokens: maxTokens,
+        attachedFile: fileToProcess  // Passar o arquivo anexado para a API
+      };
+      
+      // Adicionar ferramentas se houver alguma selecionada (todos os modelos atuais suportam)
+      if (selectedTools.length > 0) {
+        try {
+          // Usar as definições de API pré-configuradas para cada ferramenta
+          const tools = selectedTools.map(toolId => {
+            const tool = AVAILABLE_TOOLS.find(t => t.id === toolId);
+            if (tool && tool.apiDefinition) {
+              return { ...tool.apiDefinition };
+            }
+            return null;
+          }).filter(Boolean); // Remover itens nulos
+          
+          if (tools.length > 0) {
+            apiOptions.tools = tools;
+            apiOptions.tool_choice = "auto";
+            console.log('Sending tools:', JSON.stringify(tools, null, 2)); // Debug formatado
+          }
+        } catch (toolError) {
+          console.error('Error preparing tools:', toolError);
+        }
+      }
+      
+      console.log(`Enviando mensagem usando modelo: ${selectedModel}`);
+      // Garantir que estamos usando Claude 3.7 se nenhum modelo estiver definido
+      const modelToUse = selectedModel || 'claude-3-7-sonnet-20250219';
+      
+      try {
+        const streamController = await sendMessageWithStreaming(
+          conversationRef.current,
+          finalUserContent,
+          modelToUse,
+          {
+            onData: (data) => {
+              // Atualizar o texto conforme é recebido
+              currentAssistantMessage = data.content || '';
+              const deltaText = data.delta || '';
+              
+              // Atualizar a mensagem na interface em tempo real
+              setMessages(prev => {
+                const messageIndex = prev.findIndex(msg => 
+                  msg.role === 'assistant' && (msg.isThinking || msg.isStreaming)
+                );
+                
+                if (messageIndex !== -1) {
+                  const updatedMessages = [...prev];
+                  updatedMessages[messageIndex] = {
+                    ...updatedMessages[messageIndex],
+                    content: currentAssistantMessage,
+                    lastDelta: deltaText,
+                    isThinking: false,
+                    isStreaming: true,
+                    timestamp: new Date().toISOString()
+                  };
+                  return updatedMessages;
+                }
+                
+                return prev;
+              });
+            },
+            onComplete: (result) => {
+              // Finalizar a mensagem quando o streaming terminar
+              setMessages(prev => {
+                const assistantMessageIndex = prev.findIndex(
+                  msg => msg.role === 'assistant' && msg.isStreaming
+                );
+                
+                if (assistantMessageIndex > -1) {
+                  const updatedMessages = [...prev];
+                  updatedMessages[assistantMessageIndex] = {
+                    ...updatedMessages[assistantMessageIndex],
+                    content: result.content || currentAssistantMessage,
+                    isStreaming: false,
+                    isThinking: false
+                  };
+                  return updatedMessages;
+                }
+                
+                return prev;
+              });
+              
+              // Salvar conversa atualizada - usar o ID da URL atual
+              const currentChatId = window.location.pathname.split('/').pop();
+              conversationRef.current.save(currentChatId);
+              
+              // Atualizar o título na lista de conversas recentes após a primeira mensagem
+              if (messages.length <= 2) { // Primeira interação (usuário + assistente)
+                const messageText = messages[0]?.content || input;
+                const title = messageText.substring(0, 30) + (messageText.length > 30 ? '...' : '');
+                // Atualizar o histórico com o título da conversa baseado na primeira mensagem
+                addToHistory({
+                  id: currentChatId,
+                  title: title,
+                  messageCount: 2, // Usuário + assistente
+                  lastActivity: new Date()
+                });
+              }
+              
+              // Limpar status
+              setActiveRunId(null);
+              setIsTyping(false);
+            },
+            onError: (errorMsg) => {
+              console.error('Streaming error:', errorMsg);
+              
+              // Formatar mensagem de erro para ser mais útil
+              let errorMessage = 'Desculpe, ocorreu um erro durante o processamento da resposta.';
+              
+              // Erros específicos de ferramenta
+              if (errorMsg.includes('Missing required parameter: \'tools[0].function\'')) {
+                errorMessage = 'Erro de configuração de ferramentas: Esta ferramenta requer parâmetros adicionais. Por favor, desative as ferramentas nas configurações ou selecione outro modelo.';
+              } else if (errorMsg.includes('tool_choice')) {
+                errorMessage = 'Erro de configuração: Problema com a seleção de ferramentas. Por favor, desative as ferramentas nas configurações.';
+              } else if (errorMsg.toLowerCase().includes('model')) {
+                errorMessage = 'Erro de modelo: O modelo selecionado pode não estar disponível ou não suportar as ferramentas selecionadas.';
+              } else if (errorMsg.toLowerCase().includes('error')) {
+                // Manter a mensagem de erro original se parece útil
+                errorMessage = 'Erro: ' + errorMsg;
+              }
+              
+              setError('Erro: ' + errorMessage);
+              setIsTyping(false);
+              setActiveRunId(null);
+              
+              // Exibir aviso visível para o usuário
+              setSnackbar({
+                open: true,
+                message: 'Erro: Tente desativar as ferramentas nas configurações'
+              });
+              
+              // Atualizar a mensagem "Pensando..." para mostrar o erro
+              setMessages(prev => {
+                const messageIndex = prev.findIndex(msg => 
+                  msg.role === 'assistant' && (msg.isThinking || msg.isStreaming)
+                );
+                
+                if (messageIndex !== -1) {
+                  const updatedMessages = [...prev];
+                  updatedMessages[messageIndex] = {
+                    ...updatedMessages[messageIndex],
+                    content: errorMessage,
+                    isThinking: false,
+                    isStreaming: false,
+                    isError: true
+                  };
+                  return updatedMessages;
+                }
+                
+                return prev;
+              });
+            }
+          },
+          apiOptions
+        );
+        
+        // Armazenar referência ao controller para cancelamento
+        setActiveRunId(streamController);
+      } catch (streamError) {
+        console.error('Error starting streaming:', streamError);
+        setError('Erro ao iniciar streaming: ' + (streamError.message || 'Erro desconhecido'));
+        setIsTyping(false);
+        setActiveRunId(null);
+        throw streamError;
+      }
+      
+    } catch (err) {
+      console.error('Error sending message:', err);
+      
+      // Formatar mensagem de erro para ser mais útil
+      let errorMessage = 'Desculpe, ocorreu um erro ao processar sua mensagem.';
+      
+      // Erros específicos
+      if (err.message && err.message.includes('Missing required parameter: \'tools[0].function\'')) {
+        errorMessage = 'Erro de configuração de ferramentas: Esta ferramenta requer parâmetros adicionais. Por favor, desative as ferramentas nas configurações.';
+        
+        // Remover automaticamente ferramentas problemáticas
+        setSelectedTools([]);
+        
+        // Notificar o usuário
+        setSnackbar({
+          open: true,
+          message: 'Ferramentas desativadas automaticamente devido a erros de compatibilidade'
+        });
+      } else if (err.message && err.message.includes('not available')) {
+        errorMessage = 'O modelo selecionado não está disponível. Por favor, selecione outro modelo nas configurações.';
+      } else if (err.message) {
+        errorMessage = 'Erro: ' + err.message;
+      }
+      
+      setError('Erro: ' + errorMessage);
+      setIsTyping(false);
+      
+      // Substituir a mensagem "Pensando..." por uma mensagem de erro
+      setMessages(prev => {
+        const thinkingIndex = prev.findIndex(
+          msg => msg.role === 'assistant' && msg.isThinking
+        );
+        
+        if (thinkingIndex > -1) {
+          const newMessages = [...prev];
+          newMessages[thinkingIndex] = {
+            role: 'assistant',
+            content: errorMessage,
+            timestamp: new Date().toISOString(),
+            isError: true,
+            isStreaming: false,
+            isThinking: false
+          };
+          return newMessages;
+        }
+        
+        return prev;
+      });
+    }
+  };
+  
+  // Abrir o seletor de arquivo para mensagem
+  const handleOpenFileSelector = () => {
+    fileInputRef.current?.click();
+  };
+
+  // Abrir o seletor de arquivo para preset
+  const handleOpenPresetFileSelector = () => {
+    presetFileInputRef.current?.click();
+  };
+  
+  // Processar os arquivos selecionados para mensagem
+  const handleFileSelected = async (e) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    
+    // Verificar se já existe algum arquivo anexado
+    if (attachedFile) {
+      setSnackbar({
+        open: true,
+        message: 'Remova o arquivo atual antes de anexar novos arquivos'
+      });
+      return;
+    }
+    
+    setUploadingFile(true);
+    setSnackbar({
+      open: true,
+      message: `Enviando ${files.length} arquivo(s)...`
+    });
+    
+    // Apenas processamos o primeiro arquivo para a interface de chat
+    const file = files[0];
+    
+    // Verificar o tipo de arquivo (permitir apenas PDF, CSV, TXT, Markdown)
+    const allowedTypes = ['application/pdf', 'text/csv', 'text/plain', 'text/markdown'];
+    const fileExtension = file.name.split('.').pop()?.toLowerCase();
+    
+    if (!allowedTypes.includes(file.type) && 
+        !['pdf', 'csv', 'txt', 'md', 'markdown'].includes(fileExtension)) {
+      setSnackbar({
+        open: true,
+        message: 'Somente arquivos PDF, CSV, TXT e Markdown são suportados'
+      });
+      setUploadingFile(false);
+      return;
+    }
+    
+    try {
+      // Se houver mais de um arquivo, avise o usuário que apenas o primeiro será usado
+      if (files.length > 1) {
+        setSnackbar({
+          open: true,
+          message: 'Apenas o primeiro arquivo será usado na mensagem.'
+        });
+      }
+      
+      const response = await uploadFile(file);
+      setAttachedFile({
+        id: response.id,
+        name: file.name,
+        type: file.type,
+        extension: fileExtension
+      });
+      
+      setTimeout(() => {
+        setSnackbar({
+          open: true,
+          message: 'Arquivo anexado com sucesso: ' + file.name
+        });
+      }, 1000);
+    } catch (err) {
+      console.error('Error uploading file:', err);
+      setSnackbar({
+        open: true,
+        message: 'Erro ao enviar arquivo: ' + (err.message || 'Erro desconhecido')
+      });
+    } finally {
+      setUploadingFile(false);
+      // Limpar o input para permitir selecionar o mesmo arquivo novamente
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+  
+  // Remover o arquivo anexado da mensagem
+  const handleRemoveFile = () => {
+    setAttachedFile(null);
+    setSnackbar({
+      open: true,
+      message: 'Arquivo removido'
+    });
+  };
+  
+  // Processar arquivos selecionados para preset
+  const handlePresetFileSelected = async (e) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    
+    setUploadingPresetFile(true);
+    setSnackbar({
+      open: true,
+      message: `Enviando ${files.length} arquivo(s) para o modelo...`
+    });
+    
+    // Permitimos múltiplos arquivos para presets
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      
+      // Verificar o tipo de arquivo (permitir apenas PDF, CSV, TXT, Markdown)
+      const allowedTypes = ['application/pdf', 'text/csv', 'text/plain', 'text/markdown'];
+      const fileExtension = file.name.split('.').pop()?.toLowerCase();
+      
+      if (!allowedTypes.includes(file.type) && 
+          !['pdf', 'csv', 'txt', 'md', 'markdown'].includes(fileExtension)) {
+        setSnackbar({
+          open: true,
+          message: `Arquivo ${file.name} ignorado: somente PDF, CSV, TXT e Markdown são suportados`
+        });
+        continue;
+      }
+      
+      try {
+        const response = await uploadFile(file);
+        setPresetAttachedFiles(prev => [
+          ...prev, 
+          {
+            id: response.id,
+            name: file.name,
+            type: file.type,
+            extension: fileExtension,
+            size: file.size,
+            uploadedAt: new Date().toISOString()
+          }
+        ]);
+      } catch (err) {
+        console.error(`Error uploading file ${file.name}:`, err);
+        setSnackbar({
+          open: true,
+          message: `Erro ao enviar arquivo ${file.name}: ${err.message || 'Erro desconhecido'}`
+        });
+      }
+    }
+    
+    setUploadingPresetFile(false);
+    // Limpar o input para permitir selecionar o mesmo arquivo novamente
+    if (presetFileInputRef.current) {
+      presetFileInputRef.current.value = '';
+    }
+    
+    setSnackbar({
+      open: true,
+      message: 'Arquivos adicionados ao modelo'
+    });
+  };
+  
+  // Remover arquivo do preset
+  const handleRemovePresetFile = (fileId) => {
+    setPresetAttachedFiles(prev => prev.filter(file => file.id !== fileId));
+    setSnackbar({
+      open: true,
+      message: 'Arquivo removido do modelo'
+    });
+  };
+  
+  // Abrir diálogo de configurações
+  const handleOpenSettings = () => {
+    setSettingsOpen(true);
+  };
+  
+  // Salvar configurações
+  const handleSaveSettings = () => {
+    // Obter a conversa atual
+    const conversation = conversationRef.current;
+    const currentSystemPrompt = conversation.getHistory().find(msg => msg.role === 'system')?.content;
+    
+    // Verificar se alguma configuração importante mudou
+    const needsReset = currentSystemPrompt !== systemPrompt;
+    
+    // Atualizar todas as configurações no estado atual
+    if (needsReset) {
+      // Se o system prompt mudou, precisamos reiniciar a conversa
+      setManualSystemPromptChange(true);
+      conversation.reset(systemPrompt);
+      setMessages([]);
+      
+      setSnackbar({
+        open: true,
+        message: 'Configurações atualizadas e conversa reiniciada'
+      });
+    } else {
+      // Outras configurações que não exigem reinicialização da conversa
+      setSnackbar({
+        open: true,
+        message: 'Configurações atualizadas'
+      });
+    }
+    
+    // Fechar o diálogo de configurações
+    setSettingsOpen(false);
+    
+    // Salvar a conversa atual com configurações atualizadas
+    const currentChatId = window.location.pathname.split('/').pop();
+    conversation.save(currentChatId);
+    
+    // Salvar system prompt separadamente para garantir que seja carregado corretamente
+    localStorage.setItem('default_system_prompt', systemPrompt);
+  };
+  
+  // Abrir diálogo para salvar preset
+  const handleOpenSavePreset = () => {
+    setPresetName('');
+    // Limpar arquivos anexados se não estamos editando um preset
+    if (!presetToEdit) {
+      setPresetAttachedFiles([]);
+    }
+    setPresetSaveOpen(true);
+  };
+  
+  // Salvar preset atual
+  const handleSavePreset = () => {
+    if (!presetName.trim()) {
+      setSnackbar({
+        open: true,
+        message: 'Por favor, informe um nome para o preset'
+      });
+      return;
+    }
+    
+    try {
+      let updatedPresets;
+      let presetId;
+      let isEditing = false;
+      
+      // Verificar se estamos editando um preset existente
+      if (presetToEdit) {
+        // Estamos editando um preset existente
+        presetId = presetToEdit.id;
+        isEditing = true;
+        
+        // Atualizar o preset existente
+        updatedPresets = presets.map(p => {
+          if (p.id === presetId) {
+            // Manter dados que não devem ser alterados
+            const hasConversation = p.hasConversation;
+            const lastUpdated = new Date().toISOString();
+            const createdAt = p.createdAt;
+            
+            return {
+              ...p,
+              name: presetName.trim(),
+              model: selectedModel,
+              systemPrompt: systemPrompt,
+              temperature: temperature,
+              maxTokens: maxTokens,
+              tools: selectedTools,
+              lastUpdated,
+              // Preservar status da conversa
+              hasConversation,
+              // Atualizar arquivos anexados
+              attachedFiles: presetAttachedFiles
+            };
+          }
+          return p;
+        });
+      } else {
+        // Criando um novo preset
+        presetId = `preset_${Date.now()}`;
+        
+        // Criar objeto do preset
+        const newPreset = {
+          id: presetId,
+          name: presetName.trim(),
+          model: selectedModel,
+          systemPrompt: systemPrompt,
+          temperature: temperature,
+          maxTokens: maxTokens,
+          tools: selectedTools,
+          createdAt: new Date().toISOString(),
+          hasConversation: false, // Inicialmente não tem conversa salva
+          attachedFiles: presetAttachedFiles // Arquivos anexados durante a criação
+        };
+        
+        // Adicionar à lista de presets
+        updatedPresets = [...presets, newPreset];
+      }
+      
+      // Atualizar estado e localStorage
+      setPresets(updatedPresets);
+      localStorage.setItem('chat_presets', JSON.stringify(updatedPresets));
+      
+      // Fechar diálogo e notificar
+      setPresetSaveOpen(false);
+      setPresetToEdit(null); // Limpar estado de edição
+      
+      setSnackbar({
+        open: true,
+        message: isEditing 
+          ? `Preset "${presetName}" atualizado com sucesso` 
+          : `Preset "${presetName}" salvo com sucesso`
+      });
+      
+      // Navegar para o preset
+      navigate(`/prompt-chat/${presetId}`);
+    } catch (e) {
+      console.error('Error saving preset:', e);
+      setSnackbar({
+        open: true,
+        message: 'Erro ao salvar preset: ' + e.message
+      });
+    }
+  };
+  
+  // Salvar conversa atual com o worker
+  const handleSaveConversationWithPreset = () => {
+    // Extrair o ID base do worker do chatId
+    const workerBaseId = id.includes('_chat_') ? id.split('_chat_')[0] : id;
+    
+    if (!workerBaseId || workerBaseId === 'default') {
+      setSnackbar({
+        open: true,
+        message: 'Salve primeiro como worker para poder salvar a conversa'
+      });
+      return;
+    }
+    
+    try {
+      // Encontrar o worker (preset) atual
+      const presetIndex = presets.findIndex(p => p.id === workerBaseId);
+      if (presetIndex === -1) {
+        throw new Error('Worker não encontrado');
+      }
+      
+      // Salvar a conversa atual no localStorage com o ID atual
+      conversationRef.current.save(id);
+      
+      // Marcar o worker como tendo uma conversa salva
+      const updatedPresets = [...presets];
+      updatedPresets[presetIndex] = {
+        ...updatedPresets[presetIndex],
+        hasConversation: true,
+        lastUpdated: new Date().toISOString()
+      };
+      
+      // Atualizar estado e localStorage
+      setPresets(updatedPresets);
+      localStorage.setItem('chat_presets', JSON.stringify(updatedPresets));
+      
+      // Atualizar o preset atual
+      setCurrentPreset(updatedPresets[presetIndex]);
+      
+      setSnackbar({
+        open: true,
+        message: 'Conversa salva com sucesso!'
+      });
+    } catch (e) {
+      console.error('Error saving conversation with preset:', e);
+      setSnackbar({
+        open: true,
+        message: 'Erro ao salvar conversa: ' + e.message
+      });
+    }
+  };
+  
+  // Abrir o gerenciador de presets
+  const handleOpenPresetManager = () => {
+    setPresetManagerOpen(true);
+  };
+  
+  // Abrir menu de opções do preset
+  const handlePresetMenuClick = (event, preset) => {
+    setPresetAnchorEl(event.currentTarget);
+    setPresetToEdit(preset);
+  };
+  
+  // Fechar menu de opções do preset
+  const handlePresetMenuClose = () => {
+    setPresetAnchorEl(null);
+    setPresetToEdit(null);
+  };
+  
+  // Editar um preset existente
+  const handleEditPreset = () => {
+    if (!presetToEdit) return;
+    
+    // Fechar o menu
+    handlePresetMenuClose();
+    
+    // Abrir o diálogo de edição com os valores preenchidos
+    setPresetName(presetToEdit.name);
+    setSelectedModel(presetToEdit.model || 'claude-3-7-sonnet-20250219');
+    setSystemPrompt(presetToEdit.systemPrompt || '');
+    setTemperature(presetToEdit.temperature || 0.7);
+    setMaxTokens(presetToEdit.maxTokens || 2048);
+    setSelectedTools(presetToEdit.tools || []);
+    setPresetAttachedFiles(presetToEdit.attachedFiles || []);
+    
+    // Abrir o diálogo de configurações para edição
+    setSettingsOpen(true);
+  };
+  
+  // Confirmar exclusão de um preset
+  const handleConfirmDeletePreset = () => {
+    if (!presetToEdit) return;
+    
+    // Fechar o menu e abrir diálogo de confirmação
+    handlePresetMenuClose();
+    setPresetToDelete(presetToEdit);
+    setConfirmDeleteOpen(true);
+  };
+  
+  // Excluir um preset
+  const handleDeletePreset = () => {
+    if (!presetToDelete) return;
+    
+    try {
+      // Filtrar o preset da lista
+      const updatedPresets = presets.filter(p => p.id !== presetToDelete.id);
+      
+      // Atualizar estado e localStorage
+      setPresets(updatedPresets);
+      localStorage.setItem('chat_presets', JSON.stringify(updatedPresets));
+      
+      // Remover dados da conversa associados ao preset
+      localStorage.removeItem(`conversation_${presetToDelete.id}`);
+      
+      // Voltar ao chat padrão se o preset excluído era o atual
+      if (id === presetToDelete.id) {
+        navigate('/prompt-chat');
+      }
+      
+      setSnackbar({
+        open: true,
+        message: `Preset "${presetToDelete.name}" excluído com sucesso`
+      });
+    } catch (e) {
+      console.error('Error deleting preset:', e);
+      setSnackbar({
+        open: true,
+        message: 'Erro ao excluir preset: ' + e.message
+      });
+    } finally {
+      // Fechar diálogo de confirmação
+      setConfirmDeleteOpen(false);
+      setPresetToDelete(null);
+    }
+  };
+  
+  // Fechar snackbar
+  const handleCloseSnackbar = () => {
+    setSnackbar({ ...snackbar, open: false });
+  };
+  
+  // Abrir diálogo de confirmação para reiniciar conversa
+  const handleOpenResetConfirm = () => {
+    if (isTyping || activeRunId) {
+      setSnackbar({
+        open: true,
+        message: 'Aguarde o término da resposta atual antes de reiniciar a conversa.'
+      });
+      return;
+    }
+    setConfirmResetOpen(true);
+  };
+  
+  // Fechar diálogo de confirmação
+  const handleCloseResetConfirm = () => {
+    setConfirmResetOpen(false);
+  };
+  
+  // Reiniciar conversa
+  const handleResetConversation = () => {
+    if (isTyping || activeRunId) {
+      setSnackbar({
+        open: true,
+        message: 'Aguarde o término da resposta atual antes de reiniciar a conversa.'
+      });
+      return;
+    }
+    
+    setIsResettingThread(true);
+    setError(null);
+    
+    try {
+      // Resetar o gerenciador de conversa
+      conversationRef.current.reset(systemPrompt);
+      
+      // Limpar mensagens da UI
+      setMessages([]);
+      
+      // Limpar localStorage para essa conversa
+      const currentChatId = window.location.pathname.split('/').pop();
+      localStorage.removeItem(`conversation_${currentChatId}`);
+      
+      setSnackbar({
+        open: true,
+        message: 'Conversa reiniciada com sucesso!'
+      });
+    } catch (err) {
+      console.error('Error resetting conversation:', err);
+      setError('Erro ao reiniciar conversa: ' + (err.message || 'Erro desconhecido'));
+    } finally {
+      setIsResettingThread(false);
+      handleCloseResetConfirm();
+    }
+  };
+  
+  return (
+    <Box sx={{ 
+      height: '100%', 
+      display: 'flex', 
+      flexDirection: 'column',
+      position: 'relative',
+      bgcolor: 'background.default',
+      borderRadius: 1,
+      overflow: 'hidden'
+    }}>
+      {/* Banner de instruções removido */}
+      
+      {/* Cabeçalho simplificado */}
+      <AppBar position="static" color="default" elevation={1}>
+        <Box sx={{ display: 'flex', alignItems: 'center', padding: 2 }}>
+          <IconButton 
+            edge="start" 
+            color="inherit" 
+            onClick={() => navigate('/')}
+            sx={{ mr: 1 }}
+          >
+            <ArrowBackIcon />
+          </IconButton>
+          
+          <Avatar sx={{ bgcolor: 'primary.main', mr: 2 }}>
+            <SmartToyIcon />
+          </Avatar>
+          
+          <Box sx={{ flexGrow: 1 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center' }}>
+              <Typography variant="h6">
+                {currentPreset ? currentPreset.name : 'Chat com IA'}
+              </Typography>
+              
+              {currentPreset && (
+                <Tooltip title="Worker configurado">
+                  <Chip 
+                    icon={<TuneIcon fontSize="small" />}
+                    label="Worker" 
+                    size="small"
+                    color="primary"
+                    variant="outlined"
+                    sx={{ ml: 1, height: 20, fontSize: '0.6rem' }}
+                  />
+                </Tooltip>
+              )}
+            </Box>
+            
+            <Box sx={{ display: 'flex', alignItems: 'center' }}>
+              <Chip 
+                label={AVAILABLE_MODELS.find(m => m.id === selectedModel)?.name || selectedModel}
+                size="small"
+                color="primary"
+                sx={{ 
+                  fontSize: '0.75rem',
+                  fontWeight: 'bold',
+                  background: selectedModel.includes('1106') ? '#FF6B6B' : 
+                              selectedModel.includes('2024-04-09') ? '#4ECDC4' : 
+                              selectedModel.includes('turbo') ? '#9D65C9' : '#30475E'
+                }}
+              />
+              
+              {currentPreset?.hasConversation && (
+                <Tooltip title="Este preset tem uma conversa salva">
+                  <Chip 
+                    label="Conversa salva" 
+                    size="small"
+                    variant="outlined"
+                    sx={{ ml: 1, height: 20, fontSize: '0.65rem' }}
+                  />
+                </Tooltip>
+              )}
+            </Box>
+          </Box>
+          
+          {currentPreset && (
+            <>
+              <Tooltip title="Salvar conversa atual com este worker">
+                <IconButton 
+                  color="primary" 
+                  onClick={handleSaveConversationWithPreset}
+                  disabled={isTyping || activeRunId}
+                >
+                  <SaveIcon />
+                </IconButton>
+              </Tooltip>
+              <Tooltip title="Iniciar nova conversa com este worker">
+                <IconButton 
+                  color="secondary" 
+                  onClick={() => navigate(`/prompt-chat/${currentPreset.id}?new=true&forcenew=true&t=${Date.now()}`)}
+                  disabled={isTyping || activeRunId}
+                >
+                  <AddIcon />
+                </IconButton>
+              </Tooltip>
+            </>
+          )}
+          
+          {/* Botão de configurações removido - editar workers apenas na tela inicial */}
+        </Box>
+      </AppBar>
+      
+      {/* Área de mensagens */}
+      <Box 
+        sx={{ 
+          flex: 1, 
+          overflow: 'auto', 
+          py: 2, 
+          px: { xs: 2, sm: 3 }, 
+          display: 'flex',
+          flexDirection: 'column'
+        }}
+        onScroll={handleScroll}
+      >
+        {error && (
+          <Alert severity="error" sx={{ mb: 2 }}>
+            {error}
+          </Alert>
+        )}
+        
+        {messages.length === 0 && (
+          <Box sx={{ 
+            display: 'flex', 
+            flexDirection: 'column', 
+            alignItems: 'center', 
+            justifyContent: 'center',
+            height: '100%',
+            opacity: 0.8
+          }}>
+            <SmartToyIcon sx={{ fontSize: 60, color: 'primary.main', mb: 2 }} />
+            <Typography variant="h5" gutterBottom>
+              Chat com Modelo de IA
+            </Typography>
+            <Typography variant="body2" color="text.secondary" align="center" sx={{ maxWidth: 500 }}>
+              Comece uma conversa enviando uma mensagem. Você pode fazer perguntas, 
+              pedir sugestões, ou solicitar ajuda com tarefas.
+            </Typography>
+          </Box>
+        )}
+        
+        <List sx={{ width: '100%', maxWidth: 800, mx: 'auto' }}>
+          {messages.map((message, index) => (
+            <React.Fragment key={index}>
+              <ListItem alignItems="flex-start" sx={{ 
+                bgcolor: message.role === 'assistant' ? 'background.paper' : 'transparent',
+                borderRadius: 2,
+                mb: 2,
+                p: 2
+              }}>
+                <ListItemAvatar>
+                  <Avatar sx={{ 
+                    bgcolor: message.role === 'assistant' ? 'primary.main' : 'secondary.main'
+                  }}>
+                    {message.role === 'assistant' ? <SmartToyIcon /> : <PersonIcon />}
+                  </Avatar>
+                </ListItemAvatar>
+                <ListItemText
+                  primary={message.role === 'assistant' ? 'Assistente' : 'Você'}
+                  secondaryTypographyProps={{ component: 'div' }}
+                  secondary={
+                    <Box>
+                      <Box 
+                        sx={{ 
+                          mt: 1,
+                          color: message.isError ? "error.main" : "text.primary",
+                          '& .markdown': {
+                            '& h1': { fontSize: '1.5rem', fontWeight: 'bold', my: 1 },
+                            '& h2': { fontSize: '1.3rem', fontWeight: 'bold', my: 1 },
+                            '& h3': { fontSize: '1.15rem', fontWeight: 'bold', my: 1 },
+                            '& h4': { fontSize: '1.1rem', fontWeight: 'bold', my: 0.8 },
+                            '& h5': { fontSize: '1.05rem', fontWeight: 'bold', my: 0.8 },
+                            '& h6': { fontSize: '1rem', fontWeight: 'bold', my: 0.8 },
+                            '& p': { my: 0.8 },
+                            '& a': { color: 'primary.main', textDecoration: 'none' },
+                            '& img': { maxWidth: '100%', my: 1 },
+                            '& blockquote': { 
+                              pl: 2, 
+                              borderLeft: '4px solid', 
+                              borderColor: 'divider',
+                              my: 1,
+                              ml: 0,
+                              fontStyle: 'italic',
+                              bgcolor: 'rgba(0,0,0,0.03)',
+                              py: 0.5
+                            },
+                            '& pre': { 
+                              backgroundColor: 'rgba(0,0,0,0.04)', 
+                              p: 1, 
+                              borderRadius: 1,
+                              overflowX: 'auto',
+                              '& code': {
+                                fontFamily: 'monospace'
+                              }
+                            },
+                            '& code': { 
+                              fontFamily: 'monospace',
+                              backgroundColor: 'rgba(0,0,0,0.04)',
+                              px: 0.5,
+                              borderRadius: 0.5
+                            },
+                            '& ul, & ol': { pl: 3, my: 1 },
+                            '& table': {
+                              borderCollapse: 'collapse',
+                              width: '100%',
+                              my: 1,
+                              '& th, & td': {
+                                border: '1px solid',
+                                borderColor: 'divider',
+                                p: 1
+                              },
+                              '& th': {
+                                backgroundColor: 'rgba(0,0,0,0.04)'
+                              }
+                            },
+                            '& hr': {
+                              border: 'none',
+                              height: '1px',
+                              backgroundColor: 'divider',
+                              my: 2
+                            }
+                          }
+                        }}
+                      >
+                        {message.isThinking || message.isError ? (
+                          <Typography variant="body1">
+                            {message.content}
+                          </Typography>
+                        ) : (
+                          <ReactMarkdown 
+                            className="markdown"
+                            remarkPlugins={[remarkGfm]}
+                          >
+                            {message.content}
+                          </ReactMarkdown>
+                        )}
+                      </Box>
+                      
+                      {message.attachedFile && (
+                        <Box 
+                          sx={{ 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            mt: 1,
+                            p: 1,
+                            bgcolor: 'rgba(0, 0, 0, 0.04)',
+                            borderRadius: 1,
+                            maxWidth: 'fit-content'
+                          }}
+                        >
+                          {message.attachedFile.extension === 'pdf' ? (
+                            <PictureAsPdfIcon fontSize="small" sx={{ mr: 1, color: '#e53935' }} />
+                          ) : message.attachedFile.extension === 'csv' ? (
+                            <TableChartIcon fontSize="small" sx={{ mr: 1, color: '#43a047' }} />
+                          ) : (
+                            <DescriptionIcon fontSize="small" sx={{ mr: 1, color: '#1e88e5' }} />
+                          )}
+                          <Typography variant="caption" sx={{ fontWeight: 500 }}>
+                            {message.attachedFile.name}
+                          </Typography>
+                        </Box>
+                      )}
+                      
+                      {message.isStreaming && (
+                        <Box sx={{ display: 'flex', alignItems: 'center', mt: 1 }}>
+                          {message.isThinking ? (
+                            <>
+                              <CircularProgress size={12} sx={{ mr: 1 }} />
+                              <Typography variant="caption" color="text.secondary" component="span">
+                                Pensando...
+                              </Typography>
+                            </>
+                          ) : (
+                            <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                              <Box 
+                                sx={{ 
+                                  width: '8px', 
+                                  height: '8px', 
+                                  borderRadius: '50%', 
+                                  backgroundColor: 'primary.main',
+                                  mr: 0.5,
+                                  animation: 'pulse 1.5s infinite',
+                                  '@keyframes pulse': {
+                                    '0%': { opacity: 0.4 },
+                                    '50%': { opacity: 1 },
+                                    '100%': { opacity: 0.4 },
+                                  },
+                                }} 
+                              />
+                              <Typography variant="caption" color="text.secondary" component="span">
+                                Digitando em tempo real...
+                              </Typography>
+                            </Box>
+                          )}
+                        </Box>
+                      )}
+                    </Box>
+                  }
+                />
+              </ListItem>
+              {index < messages.length - 1 && <Divider variant="inset" component="li" />}
+            </React.Fragment>
+          ))}
+          <div ref={messagesEndRef} />
+        </List>
+      </Box>
+      
+      {/* Área de input */}
+      <Paper 
+        component="form" 
+        onSubmit={handleSendMessage} 
+        sx={{ 
+          p: 2, 
+          mx: { xs: 2, sm: 3 }, 
+          mb: 2, 
+          display: 'flex', 
+          flexDirection: 'column',
+          maxWidth: 800,
+          width: 'auto',
+          alignSelf: 'center',
+          boxShadow: 3,
+          borderRadius: 2,
+          width: '100%',
+          position: 'relative'
+        }}
+      >
+        {activeRunId && (
+          <Box
+            sx={{
+              position: 'absolute',
+              top: -30,
+              left: '50%',
+              transform: 'translateX(-50%)',
+              backgroundColor: 'primary.main',
+              color: 'white',
+              py: 0.5,
+              px: 2,
+              borderRadius: '12px 12px 0 0',
+              fontSize: '0.75rem',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1,
+              boxShadow: 1
+            }}
+          >
+            <CircularProgress size={12} sx={{ color: 'white' }} />
+            <span>Processando resposta...</span>
+          </Box>
+        )}
+        
+        {attachedFile && (
+          <Box 
+            sx={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              mb: 2,
+              pb: 1.5,
+              borderBottom: '1px solid rgba(0,0,0,0.08)'
+            }}
+          >
+            <Box 
+              sx={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                bgcolor: 'rgba(25, 118, 210, 0.08)',
+                borderRadius: 1,
+                p: 0.75,
+                pl: 1,
+                pr: 1
+              }}
+            >
+              {attachedFile.extension === 'pdf' ? (
+                <PictureAsPdfIcon fontSize="small" sx={{ mr: 1, color: '#e53935' }} />
+              ) : attachedFile.extension === 'csv' ? (
+                <TableChartIcon fontSize="small" sx={{ mr: 1, color: '#43a047' }} />
+              ) : (
+                <DescriptionIcon fontSize="small" sx={{ mr: 1, color: '#1e88e5' }} />
+              )}
+              <Typography variant="body2" noWrap sx={{ mr: 1, maxWidth: 200 }}>
+                {attachedFile.name}
+              </Typography>
+              <IconButton 
+                size="small" 
+                onClick={handleRemoveFile}
+                sx={{ 
+                  p: 0.5, 
+                  '&:hover': { 
+                    bgcolor: 'rgba(0,0,0,0.1)' 
+                  } 
+                }}
+              >
+                <Typography variant="caption" sx={{ fontWeight: 'bold' }}>×</Typography>
+              </IconButton>
+            </Box>
+            <Typography variant="caption" color="text.secondary" sx={{ ml: 1.5 }}>
+              Este arquivo será enviado com a mensagem
+            </Typography>
+          </Box>
+        )}
+        
+        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+          <TextField
+            fullWidth
+            placeholder={activeRunId 
+              ? "Aguarde o término da resposta atual..." 
+              : "Envie uma mensagem... (suporta Markdown)"
+            }
+            variant="standard"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                if (input.trim() && !isTyping && !activeRunId && hasApiKey()) {
+                  handleSendMessage(e);
+                }
+              }
+            }}
+            multiline
+            maxRows={4}
+            sx={{ flexGrow: 1, mr: 1 }}
+            InputProps={{ 
+              disableUnderline: true,
+              sx: activeRunId ? { opacity: 0.6 } : {}
+            }}
+            disabled={isTyping || activeRunId || !hasApiKey()}
+          />
+          
+          <Tooltip title="Anexar arquivo (PDF, CSV, TXT, Markdown)">
+            <span>
+              <IconButton
+                color="default"
+                onClick={handleOpenFileSelector}
+                disabled={isTyping || activeRunId || !hasApiKey() || uploadingFile || !!attachedFile}
+                sx={{ mr: 0.5, opacity: activeRunId ? 0.5 : 1 }}
+              >
+                <AttachFileIcon />
+              </IconButton>
+            </span>
+          </Tooltip>
+          
+          <Tooltip title={activeRunId 
+            ? "Aguarde o término da resposta atual" 
+            : (!input.trim() && attachedFile ? "Enviar arquivo anexado" : "Enviar mensagem")
+          }>
+            <span>
+              <IconButton 
+                color="primary" 
+                aria-label="enviar mensagem" 
+                onClick={handleSendMessage}
+                disabled={(!input.trim() && !attachedFile) || isTyping || activeRunId || !hasApiKey()}
+                sx={{ 
+                  bgcolor: (!input.trim() && attachedFile) ? 'rgba(25, 118, 210, 0.08)' : 'transparent',
+                  opacity: activeRunId ? 0.5 : 1
+                }}
+              >
+                <SendIcon />
+              </IconButton>
+            </span>
+          </Tooltip>
+        </Box>
+        
+        {/* Input de arquivo invisível */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".pdf,.csv,.txt,.md,.markdown,application/pdf,text/csv,text/plain,text/markdown"
+          style={{ display: 'none' }}
+          onChange={handleFileSelected}
+          multiple={false}
+        />
+      </Paper>
+      
+      {/* Snackbar para notificações */}
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={6000}
+        onClose={handleCloseSnackbar}
+        message={snackbar.message}
+      />
+      
+      {/* Diálogo de configurações removido - apenas possível editar workers na tela inicial */}
+      
+      {/* Diálogo para salvar worker */}
+      <Dialog
+        open={savePresetOpen}
+        onClose={() => {
+          setPresetSaveOpen(false);
+          setPresetToEdit(null);
+        }}
+        aria-labelledby="save-preset-dialog-title"
+      >
+        <DialogTitle id="save-preset-dialog-title">
+          {presetToEdit ? `Editar Worker "${presetToEdit.name}"` : 'Salvar como Worker'}
+        </DialogTitle>
+        <DialogContent>
+          <DialogContentText sx={{ mb: 2 }}>
+            {presetToEdit 
+              ? 'Atualize as configurações deste worker. As conversas salvas não serão afetadas.'
+              : 'Salve estas configurações como um worker para reuso futuro. Você poderá iniciar novas conversas com este worker a partir da lista de workers salvos.'}
+          </DialogContentText>
+          <TextField
+            autoFocus
+            label="Nome do Worker"
+            fullWidth
+            value={presetName}
+            onChange={(e) => setPresetName(e.target.value)}
+            sx={{ mt: 1 }}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => {
+            setPresetSaveOpen(false);
+            setPresetToEdit(null);
+          }}>
+            Cancelar
+          </Button>
+          <Button 
+            onClick={handleSavePreset} 
+            variant="contained" 
+            color="primary"
+            startIcon={presetToEdit ? <EditIcon /> : <SaveIcon />}
+          >
+            {presetToEdit ? 'Atualizar' : 'Salvar'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+      
+      {/* Diálogo de confirmação para reiniciar conversa */}
+      <Dialog
+        open={confirmResetOpen}
+        onClose={handleCloseResetConfirm}
+        aria-labelledby="reset-dialog-title"
+      >
+        <DialogTitle id="reset-dialog-title" sx={{ display: 'flex', alignItems: 'center' }}>
+          <WarningIcon color="warning" sx={{ mr: 1 }} />
+          Reiniciar conversa?
+        </DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Isso irá apagar todas as mensagens e iniciar uma nova conversa.
+            Esta ação não pode ser desfeita.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseResetConfirm} color="primary">
+            Cancelar
+          </Button>
+          <Button 
+            onClick={handleResetConversation} 
+            color="primary" 
+            variant="contained"
+            startIcon={isResettingThread ? <CircularProgress size={16} color="inherit" /> : null}
+            disabled={isResettingThread}
+          >
+            {isResettingThread ? 'Reiniciando...' : 'Reiniciar conversa'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+      
+      {/* Diálogo do Gerenciador de Presets */}
+      <Dialog
+        open={presetManagerOpen}
+        onClose={() => setPresetManagerOpen(false)}
+        aria-labelledby="preset-manager-dialog-title"
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle id="preset-manager-dialog-title">
+          Gerenciador de Configurações
+        </DialogTitle>
+        <DialogContent>
+          <Box sx={{ mb: 2 }}>
+            <Typography variant="body2" color="text.secondary" paragraph>
+              Crie e gerencie configurações personalizadas para diferentes tipos de conversa.
+              As configurações salvas ficarão disponíveis no menu lateral para rápido acesso.
+            </Typography>
+          </Box>
+          
+          {presets.length === 0 ? (
+            <Box sx={{ 
+              display: 'flex', 
+              flexDirection: 'column', 
+              alignItems: 'center',
+              justifyContent: 'center',
+              py: 4,
+              bgcolor: 'background.paper',
+              borderRadius: 1
+            }}>
+              <TuneIcon sx={{ fontSize: 48, color: 'text.secondary', mb: 2, opacity: 0.5 }} />
+              <Typography variant="h6" sx={{ mb: 1 }}>Nenhum preset salvo</Typography>
+              <Typography variant="body2" color="text.secondary" align="center" sx={{ maxWidth: 400, mb: 2 }}>
+                Crie um novo preset salvando suas configurações atuais clicando no botão "Configurações".
+              </Typography>
+              <Button
+                variant="outlined"
+                startIcon={<SettingsIcon />}
+                onClick={() => {
+                  setPresetManagerOpen(false);
+                  setSettingsOpen(true);
+                }}
+              >
+                Configurar e salvar
+              </Button>
+            </Box>
+          ) : (
+            <Box sx={{ 
+              display: 'grid', 
+              gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
+              gap: 2
+            }}>
+              {presets.map(preset => (
+                <Card 
+                  key={preset.id} 
+                  variant="outlined"
+                  sx={{
+                    border: preset.id === id 
+                      ? '2px solid' 
+                      : '1px solid',
+                    borderColor: preset.id === id 
+                      ? 'primary.main' 
+                      : 'divider',
+                    position: 'relative'
+                  }}
+                >
+                  {preset.id === id && (
+                    <Box 
+                      sx={{ 
+                        position: 'absolute', 
+                        top: 0, 
+                        right: 0, 
+                        bgcolor: 'primary.main',
+                        color: 'white',
+                        px: 1,
+                        py: 0.2,
+                        fontSize: '0.65rem',
+                        borderBottomLeftRadius: 4
+                      }}
+                    >
+                      Ativo
+                    </Box>
+                  )}
+                  <CardContent>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                      <Typography 
+                        variant="h6" 
+                        component="div" 
+                        sx={{ 
+                          fontWeight: 500,
+                          color: preset.id === id ? 'primary.main' : 'text.primary'
+                        }}
+                      >
+                        {preset.name}
+                      </Typography>
+                      
+                      <IconButton
+                        size="small"
+                        onClick={(e) => handlePresetMenuClick(e, preset)}
+                      >
+                        <MoreVertIcon fontSize="small" />
+                      </IconButton>
+                    </Box>
+                    
+                    <Divider sx={{ mb: 1 }} />
+                    
+                    <Typography variant="body2" color="text.secondary" gutterBottom>
+                      {AVAILABLE_MODELS.find(m => m.id === preset.model)?.name || preset.model}
+                    </Typography>
+                    
+                    <Typography variant="caption" color="text.secondary" 
+                      sx={{ 
+                        display: 'block', 
+                        mb: 1,
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        maxWidth: '100%'
+                      }}
+                    >
+                      System Prompt: {preset.systemPrompt?.substring(0, 50) || 'Nenhum prompt configurado'}{preset.systemPrompt?.length > 50 ? '...' : ''}
+                    </Typography>
+                    
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 1 }}>
+                      {preset.tools && preset.tools.length > 0 ? preset.tools.map(toolId => {
+                        const tool = AVAILABLE_TOOLS.find(t => t.id === toolId);
+                        return tool ? (
+                          <Chip
+                            key={toolId}
+                            label={tool.name}
+                            size="small"
+                            sx={{ fontSize: '0.65rem', height: 20 }}
+                          />
+                        ) : null;
+                      }) : (
+                        <Typography variant="caption" color="text.secondary">
+                          Sem ferramentas adicionais
+                        </Typography>
+                      )}
+                    </Box>
+                  </CardContent>
+                  <CardActions>
+                    {preset.id === id ? (
+                      <Button 
+                        size="small"
+                        variant="contained"
+                        color="primary"
+                        disabled
+                      >
+                        Ativo
+                      </Button>
+                    ) : (
+                      <Button 
+                        size="small" 
+                        variant="outlined"
+                        onClick={() => {
+                          navigate(`/prompt-chat/${preset.id}`);
+                          setPresetManagerOpen(false);
+                        }}
+                      >
+                        Usar
+                      </Button>
+                    )}
+                    {preset.hasConversation && (
+                      <Chip 
+                        label="Conversa salva" 
+                        size="small"
+                        variant="outlined"
+                        sx={{ ml: 'auto', height: 20, fontSize: '0.65rem' }}
+                      />
+                    )}
+                  </CardActions>
+                </Card>
+              ))}
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button 
+            onClick={() => {
+              setPresetManagerOpen(false);
+              setSettingsOpen(true);
+            }} 
+            startIcon={<SaveIcon />}
+          >
+            Salvar atual como preset
+          </Button>
+          <Button onClick={() => setPresetManagerOpen(false)}>
+            Fechar
+          </Button>
+        </DialogActions>
+      </Dialog>
+      
+      {/* Menu de opções do preset */}
+      <Menu
+        anchorEl={presetAnchorEl}
+        open={Boolean(presetAnchorEl)}
+        onClose={handlePresetMenuClose}
+      >
+        <MenuItem onClick={handleEditPreset}>
+          <ListItemIcon>
+            <EditIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>Editar</ListItemText>
+        </MenuItem>
+        <MenuItem onClick={handleConfirmDeletePreset}>
+          <ListItemIcon>
+            <DeleteIcon fontSize="small" color="error" />
+          </ListItemIcon>
+          <ListItemText>Excluir</ListItemText>
+        </MenuItem>
+      </Menu>
+      
+      {/* Diálogo de confirmação de exclusão de preset */}
+      <Dialog
+        open={confirmDeleteOpen}
+        onClose={() => setConfirmDeleteOpen(false)}
+        aria-labelledby="delete-preset-dialog-title"
+      >
+        <DialogTitle id="delete-preset-dialog-title" sx={{ display: 'flex', alignItems: 'center' }}>
+          <WarningIcon color="error" sx={{ mr: 1 }} />
+          Excluir preset?
+        </DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Você está prestes a excluir o preset "{presetToDelete?.name}".
+            {presetToDelete?.hasConversation && ' A conversa salva com este preset também será excluída.'}
+            Esta ação não pode ser desfeita.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setConfirmDeleteOpen(false)} color="primary">
+            Cancelar
+          </Button>
+          <Button 
+            onClick={handleDeletePreset} 
+            color="error" 
+            variant="contained"
+          >
+            Excluir
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </Box>
+  );
+};

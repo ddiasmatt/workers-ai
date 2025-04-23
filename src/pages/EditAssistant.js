@@ -44,14 +44,11 @@ import TableChartIcon from '@mui/icons-material/TableChart';
 import DeleteIcon from '@mui/icons-material/Delete';
 import OpenInFullIcon from '@mui/icons-material/OpenInFull';
 import CloseIcon from '@mui/icons-material/Close';
-import MarkdownIcon from '@mui/icons-material/Code';
-import StorageIcon from '@mui/icons-material/Storage';
+import { Code } from '@mui/icons-material';
+const MarkdownIcon = Code;
 import { 
   uploadFile, 
-  listAssistantFiles, 
-  createVectorStore, 
-  listVectorStores, 
-  linkVectorStoreToAssistant 
+  listAssistantFiles 
 } from '../services/openai';
 
 // Ferramentas disponíveis para assistentes
@@ -88,14 +85,8 @@ const EditAssistant = () => {
   const [previewMode, setPreviewMode] = useState(false);
   const fileInputRef = useRef(null);
   
-  // Estados para o vector store
-  const [vectorStoreEnabled, setVectorStoreEnabled] = useState(false);
-  const [vectorStores, setVectorStores] = useState([]);
-  const [selectedVectorStore, setSelectedVectorStore] = useState('');
+  // Estados base
   const [vectorStoreStatus, setVectorStoreStatus] = useState('');
-  const [isCreatingVectorStore, setIsCreatingVectorStore] = useState(false);
-  const [vectorStoreModalOpen, setVectorStoreModalOpen] = useState(false);
-  const [newVectorStoreName, setNewVectorStoreName] = useState('');
   
   // Funções para o modal de instruções
   const handleOpenInstructionsModal = () => setInstructionsModalOpen(true);
@@ -313,150 +304,6 @@ const EditAssistant = () => {
     }
   };
   
-  // Carregar vector stores disponíveis
-  useEffect(() => {
-    const loadVectorStores = async () => {
-      try {
-        setVectorStoreStatus('Carregando vector stores...');
-        const stores = await listVectorStores();
-        setVectorStores(stores);
-        console.log('Vector stores loaded:', stores);
-        setVectorStoreStatus('');
-      } catch (err) {
-        console.error('Error loading vector stores:', err);
-        setVectorStoreStatus('Erro ao carregar vector stores.');
-      }
-    };
-    
-    if (vectorStoreEnabled) {
-      loadVectorStores();
-    }
-  }, [vectorStoreEnabled]);
-  
-  // Funções para o modal de vector store
-  const handleOpenVectorStoreModal = () => setVectorStoreModalOpen(true);
-  const handleCloseVectorStoreModal = () => setVectorStoreModalOpen(false);
-  
-  // Criar um novo vector store
-  const handleCreateVectorStore = async () => {
-    if (!newVectorStoreName.trim()) {
-      setVectorStoreStatus('Nome do vector store é obrigatório');
-      return;
-    }
-    
-    if (formData.files.length === 0) {
-      setVectorStoreStatus('É necessário ter pelo menos um arquivo para criar um vector store');
-      return;
-    }
-    
-    try {
-      setIsCreatingVectorStore(true);
-      setVectorStoreStatus('Criando vector store...');
-      
-      // Garantir que temos acesso às funções
-      const { addFilesToVectorStore } = await import('../services/openai');
-      
-      // 1. Extrair IDs dos arquivos
-      const fileIds = formData.files.map(file => file.id);
-      console.log(`Criando vector store "${newVectorStoreName}" com ${fileIds.length} arquivos:`, fileIds);
-      
-      // 2. Criar o vector store com os arquivos
-      const result = await createVectorStore(
-        newVectorStoreName,
-        fileIds
-      );
-      
-      console.log('Vector store created:', result);
-      
-      // 3. Verificar se o vector store foi criado com arquivos
-      if (!result.file_ids || result.file_ids.length === 0) {
-        console.warn('Vector store created but appears to have no files. Trying to add files explicitly...');
-        
-        try {
-          // Se não houver arquivos, tentar adicioná-los explicitamente
-          const addResult = await addFilesToVectorStore(result.id, fileIds);
-          console.log('Files added to vector store explicitly:', addResult);
-        } catch (addError) {
-          console.error('Error adding files to vector store explicitly:', addError);
-          // Continuar mesmo se falhar aqui, o vector store foi criado
-        }
-      }
-      
-      // 4. Verificar explicitamente se o vector store tem os arquivos esperados
-      console.log('Checking if all files were added to vector store:');
-      const storeFileIds = result.file_ids || [];
-      
-      // Identificar quais arquivos foram adicionados com sucesso
-      const addedFiles = fileIds.filter(id => storeFileIds.includes(id));
-      const missingFiles = fileIds.filter(id => !storeFileIds.includes(id));
-      
-      console.log(`- ${addedFiles.length} arquivos adicionados com sucesso`);
-      console.log(`- ${missingFiles.length} arquivos não foram encontrados no vector store`);
-      
-      if (missingFiles.length > 0) {
-        console.warn('Missing files in vector store:', missingFiles);
-      }
-      
-      // 4. Adicionar à lista local e selecionar automaticamente
-      setVectorStores(prev => [...prev, result]);
-      setSelectedVectorStore(result.id);
-      setVectorStoreStatus(`Vector store "${newVectorStoreName}" criado com sucesso com ${fileIds.length} arquivos!`);
-      
-      // Limpar o nome e fechar o modal
-      setNewVectorStoreName('');
-      setVectorStoreModalOpen(false);
-      
-      // Ativar a opção de vector store
-      setVectorStoreEnabled(true);
-    } catch (err) {
-      console.error('Error creating vector store:', err);
-      setVectorStoreStatus(`Erro ao criar vector store: ${err.message}`);
-    } finally {
-      setIsCreatingVectorStore(false);
-    }
-  };
-  
-  // Vincular vector store ao assistente
-  const handleLinkVectorStore = async () => {
-    if (!selectedVectorStore) {
-      setVectorStoreStatus('Selecione um vector store para vincular');
-      return;
-    }
-    
-    try {
-      setIsCreatingVectorStore(true);
-      setVectorStoreStatus('Vinculando vector store ao assistente...');
-      
-      console.log(`Vinculando Vector Store ${selectedVectorStore} ao Assistente ${id}`);
-      console.log(`Os arquivos do assistente: ${formData.files.map(f => f.id).join(', ')}`);
-      
-      // Atualizar o assistente com o vector store ID
-      const result = await linkVectorStoreToAssistant(id, selectedVectorStore);
-      
-      console.log('Vector store linked to assistant:', result);
-      
-      // Verificar se o assistente tem o vector store vinculado
-      const vectorStoreIds = result.tool_resources?.file_search?.vector_store_ids || [];
-      if (vectorStoreIds.includes(selectedVectorStore)) {
-        setVectorStoreStatus(`Vector store vinculado com sucesso! ID: ${selectedVectorStore}`);
-      } else {
-        setVectorStoreStatus('Vector store vinculado, mas não encontrado na resposta da API. Verifique o console para mais detalhes.');
-      }
-      
-      // Garantir que file_search está habilitado na UI
-      if (!formData.tools.includes('file_search')) {
-        setFormData(prev => ({
-          ...prev,
-          tools: [...prev.tools, 'file_search']
-        }));
-      }
-    } catch (err) {
-      console.error('Error linking vector store:', err);
-      setVectorStoreStatus(`Erro ao vincular vector store: ${err.message}`);
-    } finally {
-      setIsCreatingVectorStore(false);
-    }
-  };
 
   // Carregar arquivos do assistente
   useEffect(() => {
@@ -489,10 +336,6 @@ const EditAssistant = () => {
               return newState;
             });
             
-            // Se há arquivos, habilitar a opção de vector store
-            if (formattedFiles.length > 0) {
-              setVectorStoreEnabled(true);
-            }
           }
         } catch (err) {
           console.error('Error loading assistant files:', err);
@@ -509,27 +352,39 @@ const EditAssistant = () => {
   }, [id]);
   
   // Enviar formulário
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     
     if (validateForm()) {
-      // Verificar se tem arquivos e adicionar automaticamente file_search se necessário
-      const updatedTools = [...formData.tools];
-      if (formData.files && formData.files.length > 0 && !updatedTools.includes('file_search')) {
-        console.log('Files detected, adding file_search tool automatically');
-        updatedTools.push('file_search');
+      try {
+        // Verificar se tem arquivos e adicionar automaticamente file_search se necessário
+        const updatedTools = [...formData.tools];
+        if (formData.files && formData.files.length > 0 && !updatedTools.includes('file_search')) {
+          console.log('Files detected, adding file_search tool automatically');
+          updatedTools.push('file_search');
+        }
+        
+        // Preparar os dados para envio, incluindo IDs de arquivos
+        const assistantData = {
+          ...formData,
+          tools: updatedTools,
+          file_ids: formData.files.map(file => file.id)
+        };
+        
+        console.log('Submitting assistant data with files:', assistantData);
+        
+        // Aguardar a conclusão da atualização antes de navegar
+        const result = await updateAssistant(id, assistantData);
+        
+        if (result) {
+          console.log('Assistant updated successfully!');
+          navigate('/'); // Navegar apenas após a atualização bem-sucedida
+        } else {
+          console.error('Failed to update assistant');
+        }
+      } catch (error) {
+        console.error('Error updating assistant:', error);
       }
-      
-      // Preparar os dados para envio, incluindo IDs de arquivos
-      const assistantData = {
-        ...formData,
-        tools: updatedTools,
-        file_ids: formData.files.map(file => file.id)
-      };
-      
-      console.log('Submitting assistant data with files:', assistantData);
-      updateAssistant(id, assistantData);
-      setTimeout(() => navigate('/'), 1500); // Redireciona após atualizar
     }
   };
 
@@ -725,7 +580,7 @@ const EditAssistant = () => {
                   <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
                     {selected.map((value) => {
                       const tool = AVAILABLE_TOOLS.find(t => t.id === value);
-                      return <Chip key={value} label={tool ? tool.name : value} />
+                      return tool ? tool.name : value
                     })}
                   </Box>
                 )}
@@ -751,16 +606,14 @@ const EditAssistant = () => {
                 <Typography variant="subtitle1" gutterBottom>
                   Arquivos
                 </Typography>
-                <Tooltip title="Adicionar arquivo (PDF, CSV, TXT, Markdown)">
-                  <IconButton 
-                    size="small" 
-                    onClick={handleOpenFileSelector}
-                    disabled={uploadingFile}
-                    sx={{ ml: 1 }}
-                  >
-                    <AttachFileIcon fontSize="small" />
-                  </IconButton>
-                </Tooltip>
+                <IconButton 
+                  size="small" 
+                  onClick={handleOpenFileSelector}
+                  disabled={uploadingFile}
+                  sx={{ ml: 1 }}
+                >
+                  <AttachFileIcon fontSize="small" />
+                </IconButton>
               </Box>
               
               {uploadStatus && (
@@ -820,105 +673,6 @@ const EditAssistant = () => {
               />
             </Box>
             
-            {/* Vector Store */}
-            {formData.files.length > 0 && (
-              <Box>
-                <Divider sx={{ my: 2 }} />
-                
-                <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                  <Typography variant="subtitle1" gutterBottom>
-                    Vector Store
-                  </Typography>
-                  
-                  <FormControlLabel
-                    control={
-                      <Switch
-                        checked={vectorStoreEnabled}
-                        onChange={(e) => setVectorStoreEnabled(e.target.checked)}
-                        size="small"
-                      />
-                    }
-                    label="Ativar"
-                    sx={{ ml: 1 }}
-                  />
-                  
-                  <Tooltip title="Criar novo Vector Store">
-                    <IconButton
-                      size="small"
-                      onClick={handleOpenVectorStoreModal}
-                      disabled={!vectorStoreEnabled || isCreatingVectorStore}
-                      sx={{ ml: 1 }}
-                    >
-                      <StorageIcon fontSize="small" />
-                    </IconButton>
-                  </Tooltip>
-                </Box>
-                
-                {vectorStoreStatus && (
-                  <Typography
-                    variant="caption"
-                    color={
-                      vectorStoreStatus.includes('sucesso') || vectorStoreStatus.includes('vinculado')
-                        ? 'success.main'
-                        : vectorStoreStatus.includes('Erro')
-                        ? 'error'
-                        : 'text.secondary'
-                    }
-                    sx={{ display: 'block', mb: 1 }}
-                  >
-                    {vectorStoreStatus}
-                  </Typography>
-                )}
-                
-                {vectorStoreEnabled && (
-                  <Box sx={{ mb: 2 }}>
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                      Selecione um Vector Store para criar um índice vetorial dos arquivos, permitindo
-                      que o assistente pesquise e responda perguntas sobre o conteúdo dos documentos.
-                    </Typography>
-                    
-                    <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
-                      <FormControl size="small" sx={{ minWidth: 250 }}>
-                        <InputLabel id="vector-store-label">Vector Store</InputLabel>
-                        <Select
-                          labelId="vector-store-label"
-                          value={selectedVectorStore}
-                          onChange={(e) => setSelectedVectorStore(e.target.value)}
-                          label="Vector Store"
-                          disabled={isCreatingVectorStore || vectorStores.length === 0}
-                        >
-                          {vectorStores.length === 0 ? (
-                            <MenuItem disabled>Nenhum Vector Store disponível</MenuItem>
-                          ) : (
-                            vectorStores.map((store) => (
-                              <MenuItem key={store.id} value={store.id}>
-                                {store.name || `Vector Store ${store.id.slice(0, 8)}`}
-                              </MenuItem>
-                            ))
-                          )}
-                        </Select>
-                      </FormControl>
-                      
-                      <Button
-                        variant="outlined"
-                        size="small"
-                        onClick={handleLinkVectorStore}
-                        disabled={
-                          isCreatingVectorStore || 
-                          !selectedVectorStore || 
-                          !vectorStoreEnabled
-                        }
-                        sx={{ mt: 1 }}
-                      >
-                        {isCreatingVectorStore ? 
-                          <CircularProgress size={20} sx={{ mr: 1 }} /> : null}
-                        Vincular ao Assistente
-                      </Button>
-                    </Box>
-                  </Box>
-                )}
-              </Box>
-            )}
             
             {/* Botões de ação */}
             <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2, mt: 3 }}>
@@ -1080,8 +834,6 @@ const EditAssistant = () => {
         </DialogActions>
       </Dialog>
       
-      {/* Modal para criar vector store */}
-      {renderVectorStoreModal()}
     </Box>
   );
 };

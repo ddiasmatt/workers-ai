@@ -20,13 +20,20 @@ import {
   Divider,
   Avatar,
   Chip,
-  IconButton
+  IconButton,
+  Menu,
+  MenuItem,
+  ListItemIcon,
+  ListItemText
 } from '@mui/material';
 import KeyIcon from '@mui/icons-material/Key';
 import MessageIcon from '@mui/icons-material/Message';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import TuneIcon from '@mui/icons-material/Tune';
+import AttachFileIcon from '@mui/icons-material/AttachFile';
+import MoreVertIcon from '@mui/icons-material/MoreVert';
+import EditIcon from '@mui/icons-material/Edit';
 import { useNavigate } from 'react-router-dom';
 import { hasApiKey } from '../services/prompt';
 
@@ -35,6 +42,8 @@ const Home = () => {
   const [presets, setPresets] = useState([]);
   const [deleteDialog, setDeleteDialog] = useState({ open: false, presetId: null });
   const [isLoading, setIsLoading] = useState(true);
+  const [menuAnchorEl, setMenuAnchorEl] = useState(null);
+  const [selectedPresetId, setSelectedPresetId] = useState(null);
   const navigate = useNavigate();
   
   // Carregar presets
@@ -66,20 +75,45 @@ const Home = () => {
     }
   }, [openApiKeyDialog]);
 
+  // Abrir menu de opções
+  const handleMenuOpen = (event, id) => {
+    setMenuAnchorEl(event.currentTarget);
+    setSelectedPresetId(id);
+  };
+
+  // Fechar menu de opções
+  const handleMenuClose = () => {
+    setMenuAnchorEl(null);
+    setSelectedPresetId(null);
+  };
+  
+  // Navegar para editar worker - referencia direta à tela de criar worker
+  const handleEditPreset = () => {
+    if (selectedPresetId) {
+      // Usar a tela de criar para editar, passando o ID do worker
+      navigate(`/create-assistant?edit=${selectedPresetId}`);
+    }
+    handleMenuClose();
+  };
+
   // Lidar com clique de excluir
-  const handleDeleteClick = (id) => {
-    setDeleteDialog({ open: true, presetId: id });
+  const handleDeleteClick = () => {
+    if (selectedPresetId) {
+      setDeleteDialog({ open: true, presetId: selectedPresetId });
+    }
+    handleMenuClose();
   };
 
   // Confirmar exclusão
   const confirmDelete = () => {
     try {
-      const updatedPresets = presets.filter(p => p.id !== deleteDialog.presetId);
+      const presetId = deleteDialog.presetId;
+      const updatedPresets = presets.filter(p => p.id !== presetId);
       localStorage.setItem('chat_presets', JSON.stringify(updatedPresets));
       setPresets(updatedPresets);
       
       // Remover dados da conversa associados ao preset
-      localStorage.removeItem(`conversation_${deleteDialog.presetId}`);
+      localStorage.removeItem(`conversation_${presetId}`);
     } catch (e) {
       console.error('Error deleting preset:', e);
     } finally {
@@ -96,7 +130,7 @@ const Home = () => {
     <Box>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
         <Typography variant="h4">
-          Modelos de Conversa
+          Workers Salvos
         </Typography>
         
         <Box>
@@ -114,10 +148,10 @@ const Home = () => {
           <Button 
             variant="contained" 
             color="primary" 
-            startIcon={<AddIcon />}
-            onClick={() => navigate('/prompt-chat')}
+            startIcon={<TuneIcon />}
+            onClick={() => navigate('/create-assistant')}
           >
-            Nova Conversa
+            Criar Worker
           </Button>
         </Box>
       </Box>
@@ -143,46 +177,17 @@ const Home = () => {
               </Button>
             </Paper>
           )}
-
-          <Box sx={{ mb: 4 }}>
-            <Typography variant="h5" gutterBottom sx={{ mb: 2 }}>
-              Comece uma Nova Conversa
-            </Typography>
-            <Paper sx={{ p: 3, mb: 2, display: 'flex', flexDirection: { xs: 'column', md: 'row' }, alignItems: 'center', justifyContent: 'space-between' }}>
-              <Box sx={{ mb: { xs: 2, md: 0 } }}>
-                <Typography variant="h6" gutterBottom>
-                  Chat com IA Avançada
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Use os modelos mais recentes da OpenAI como GPT-4.1, GPT-4.5, GPT-o3 e GPT-4o
-                </Typography>
-              </Box>
-              <Button 
-                variant="contained" 
-                size="large"
-                endIcon={<MessageIcon />}
-                onClick={() => navigate('/prompt-chat')}
-                disabled={!isApiKeySet}
-              >
-                Iniciar Conversa
-              </Button>
-            </Paper>
-          </Box>
-
-          <Typography variant="h5" gutterBottom sx={{ mb: 2 }}>
-            Modelos Salvos
-          </Typography>
           
           {presets.length === 0 ? (
             <Paper sx={{ p: 4, textAlign: 'center' }}>
               <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', mb: 3 }}>
                 <TuneIcon sx={{ fontSize: 60, color: 'text.secondary', mb: 2, opacity: 0.5 }} />
                 <Typography variant="h6" gutterBottom>
-                  Nenhum modelo salvo
+                  Nenhum worker salvo
                 </Typography>
                 <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 500, mb: 3 }}>
-                  Inicie uma conversa e salve suas configurações como modelo para reutilização.
-                  Modelos salvos permitem configurar o prompt do sistema, modelo de IA, ferramentas e outras configurações.
+                  Inicie uma conversa e salve suas configurações como worker para reutilização.
+                  Workers permitem configurar o prompt do sistema, modelo de IA, ferramentas e outras configurações.
                 </Typography>
                 <Button 
                   variant="outlined" 
@@ -216,10 +221,9 @@ const Home = () => {
                         <Box sx={{ ml: 'auto' }}>
                           <IconButton 
                             size="small" 
-                            color="error"
-                            onClick={() => handleDeleteClick(preset.id)}
+                            onClick={(e) => handleMenuOpen(e, preset.id)}
                           >
-                            <DeleteIcon fontSize="small" />
+                            <MoreVertIcon fontSize="small" />
                           </IconButton>
                         </Box>
                       </Box>
@@ -263,16 +267,26 @@ const Home = () => {
                       >
                         {preset.systemPrompt || "Não definido"}
                       </Typography>
+                      
+                      {/* Arquivos anexados */}
+                      {preset.attachedFiles && preset.attachedFiles.length > 0 && (
+                        <Box sx={{ mt: 2 }}>
+                          <Typography variant="body2" color="text.secondary" sx={{ display: 'flex', alignItems: 'center' }}>
+                            <AttachFileIcon fontSize="small" sx={{ mr: 0.5, opacity: 0.7 }} />
+                            <span>{preset.attachedFiles.length} arquivo{preset.attachedFiles.length > 1 ? 's' : ''} anexado{preset.attachedFiles.length > 1 ? 's' : ''}</span>
+                          </Typography>
+                        </Box>
+                      )}
                     </CardContent>
                     <CardActions>
                       <Button 
                         size="small" 
                         variant="contained"
                         fullWidth
-                        onClick={() => navigate(`/prompt-chat/${preset.id}`)}
+                        onClick={() => navigate(`/prompt-chat/${preset.id}?new=true&t=${Date.now()}`)}
                         disabled={!isApiKeySet}
                       >
-                        {preset.hasConversation ? 'Continuar Conversa' : 'Usar Modelo'}
+                        Iniciar Novo Chat
                       </Button>
                     </CardActions>
                   </Card>
@@ -291,9 +305,9 @@ const Home = () => {
         <DialogTitle>Confirmar exclusão</DialogTitle>
         <DialogContent>
           <DialogContentText>
-            Tem certeza que deseja excluir este modelo de conversa? 
+            Tem certeza que deseja excluir este worker? 
             {presets.find(p => p.id === deleteDialog.presetId)?.hasConversation && 
-              ' A conversa salva com este modelo também será excluída.'}
+              ' Todas as conversas salvas com este worker também serão excluídas.'}
             Esta ação não pode ser desfeita.
           </DialogContentText>
         </DialogContent>
@@ -304,6 +318,26 @@ const Home = () => {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Menu de opções do preset */}
+      <Menu
+        anchorEl={menuAnchorEl}
+        open={Boolean(menuAnchorEl)}
+        onClose={handleMenuClose}
+      >
+        <MenuItem onClick={handleEditPreset}>
+          <ListItemIcon>
+            <EditIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>Editar</ListItemText>
+        </MenuItem>
+        <MenuItem onClick={handleDeleteClick}>
+          <ListItemIcon>
+            <DeleteIcon fontSize="small" color="error" />
+          </ListItemIcon>
+          <ListItemText>Excluir</ListItemText>
+        </MenuItem>
+      </Menu>
     </Box>
   );
 };

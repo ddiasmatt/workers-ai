@@ -1,5 +1,41 @@
 // Serviço para interagir com a API de Chat/Completion da OpenAI usando prompts diretos
 
+// Modelos disponíveis
+const AVAILABLE_MODELS = [
+  // GPT-4 Series
+  { id: 'gpt-4.1', name: 'GPT-4.1 🔥', description: 'Nova geração com 1M+ tokens de contexto', contextWindow: 1047576, maxOutputTokens: 32768 },
+  { id: 'gpt-4o', name: 'GPT-4o', description: 'Última versão GPT-4 otimizada', contextWindow: 128000, maxOutputTokens: 4096 },
+  { id: 'gpt-4-turbo', name: 'GPT-4 Turbo', description: 'Versão mais recente da série GPT-4', contextWindow: 128000, maxOutputTokens: 4096 },
+  { id: 'gpt-4', name: 'GPT-4', description: 'Versão estável GPT-4', contextWindow: 8192, maxOutputTokens: 4096 },
+  
+  // Claude Series
+  { id: 'claude-3-7-sonnet-20250219', name: 'Claude 3.7 Sonnet', description: 'Modelo Claude com alta capacidade', contextWindow: 200000, maxOutputTokens: 4096 },
+  { id: 'claude-3-opus-20240229', name: 'Claude 3 Opus', description: 'Versão premium do Claude com alta capacidade', contextWindow: 200000, maxOutputTokens: 4096 },
+  
+  // GPT-3.5 Series
+  { id: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo', description: 'Versão rápida e econômica', contextWindow: 16385, maxOutputTokens: 4096 }
+];
+
+// Função para obter o max_tokens apropriado para o modelo
+const getMaxTokensForModel = (modelId) => {
+  const model = AVAILABLE_MODELS.find(m => m.id === modelId);
+  
+  // Se encontrar o modelo, usar seus valores específicos
+  if (model) {
+    // Para modelos com grande contexto (como GPT-4.1), permitir respostas mais longas
+    if (model.contextWindow > 500000) {
+      return 8192; // Permitir respostas muito longas para GPT-4.1
+    } else if (model.contextWindow > 100000) {
+      return 4096; // Para modelos com contexto médio-grande
+    } else {
+      return 2048; // Para modelos com contexto padrão
+    }
+  }
+  
+  // Valor padrão se o modelo não for encontrado
+  return 2048;
+};
+
 // Configuração da API
 let API_KEY = localStorage.getItem('openai-api-key') || '';
 
@@ -121,11 +157,12 @@ export class ConversationManager {
   }
   
   // Adicionar mensagem ao histórico
-  addMessage(role, content, timestamp = null) {
+  addMessage(role, content, timestamp = null, attachedFile = null) {
     const message = { 
       role, 
       content,
-      timestamp: timestamp || new Date().toISOString() 
+      timestamp: timestamp || new Date().toISOString(),
+      ...(attachedFile ? { attachedFile } : {})
     };
     this.history.push(message);
     return message;
@@ -136,11 +173,23 @@ export class ConversationManager {
     return [...this.history];
   }
   
-  // Obter token count aproximado (estimativa simples)
+  // Obter token count aproximado (estimativa mais precisa)
   getApproximateTokenCount() {
-    // Uma estimativa muito aproximada: ~4 caracteres por token
-    const allText = this.history.map(msg => msg.content).join(' ');
-    return Math.ceil(allText.length / 4);
+    // Estimativa melhorada para diferentes tipos de conteúdo
+    // Em geral, 1 token ~= 4 caracteres em inglês, ~1-2 caracteres em línguas asiáticas
+    // Ajustamos para ~3.5 para cobrir português/espanhol que têm mais caracteres por token que inglês
+    
+    let totalTokens = 0;
+    
+    // Adicionar tokens das mensagens + sobrecarga para metadados (4 tokens por mensagem)
+    this.history.forEach(msg => {
+      // ~3.5 caracteres por token para línguas latinas
+      const contentTokens = Math.ceil(msg.content.length / 3.5);
+      // Adicionar sobrecarga para o formato da mensagem 
+      totalTokens += contentTokens + 4;
+    });
+    
+    return totalTokens;
   }
   
   // Obter últimas N mensagens
@@ -170,29 +219,58 @@ export class ConversationManager {
 }
 
 // Enviar mensagem para o modelo e obter resposta (sem streaming)
-export const sendMessage = async (conversation, message, model = 'gpt-3.5-turbo', options = {}) => {
+export const sendMessage = async (conversation, message, model = 'gpt-4.1', options = {}) => {
   if (!API_KEY) throw new Error('API key is required');
+  
+  // Garantir que temos um modelo válido, mas não forçar gpt-4.1
+  if (!model) model = 'gpt-4.1';
   
   // Adicionar mensagem do usuário ao histórico com timestamp
   const userTimestamp = new Date().toISOString();
   conversation.addMessage('user', message, userTimestamp);
   
-  // Opções padrão
+  // Opções padrão otimizadas para cada modelo
   const defaultOptions = {
     temperature: 0.7,
-    max_tokens: 1024
+    max_tokens: getMaxTokensForModel(model)
   };
   
   // Mesclar opções padrão com as fornecidas
   const finalOptions = { ...defaultOptions, ...options };
   
   try {
+    // Usar o ID do modelo diretamente
+    let apiModel = model;
+    
     console.log(`Sending message to model ${model}...`);
+    console.log(`API model ID: ${apiModel}`);
+    
+    // Log do token count aproximado
+    const tokenCount = conversation.getApproximateTokenCount();
+    console.log(`Approximate token count: ${tokenCount} tokens`);
+    
+    // Verificar se precisamos usar um subset do histórico por causa do limite de contexto
+    let messages = conversation.getHistory();
+    const isGpt41 = model.includes('gpt-4.1');
+    const contextLimit = isGpt41 ? 1000000 : (model.includes('gpt-4o') || model.includes('claude')) ? 120000 : 8000;
+    
+    // Se o contexto é grande demais, usar estratégia de compactação inteligente
+    if (tokenCount > contextLimit * 0.8) { // Usar 80% do limite para garantir espaço para resposta
+      console.log(`Context too large (${tokenCount} tokens). Applying smart context management...`);
+      
+      // Manter a primeira mensagem (system prompt) e as últimas X mensagens
+      const systemPrompt = messages.find(msg => msg.role === 'system');
+      const recentMessages = messages.filter(msg => msg.role !== 'system')
+        .slice(-Math.floor(contextLimit / 500)); // número estimado de mensagens que cabem
+        
+      messages = systemPrompt ? [systemPrompt, ...recentMessages] : recentMessages;
+      console.log(`Reduced context to ${messages.length} messages`);
+    }
     
     // Construir o objeto de requisição
     const requestBody = {
-      model: model,
-      messages: conversation.getHistory(),
+      model: apiModel, // Usar o ID real da API
+      messages: messages,
       temperature: finalOptions.temperature,
       max_tokens: finalOptions.max_tokens
     };
@@ -239,33 +317,97 @@ export const sendMessage = async (conversation, message, model = 'gpt-3.5-turbo'
 };
 
 // Enviar mensagem com streaming para atualizações em tempo real
-export const sendMessageWithStreaming = async (conversation, message, model = 'gpt-3.5-turbo', callbacks = {}, options = {}) => {
+export const sendMessageWithStreaming = async (conversation, message, model = 'gpt-4.1', callbacks = {}, options = {}) => {
   if (!API_KEY) throw new Error('API key is required');
   
-  // Adicionar mensagem do usuário ao histórico com timestamp
-  const userTimestamp = new Date().toISOString();
-  conversation.addMessage('user', message, userTimestamp);
+  // Garantir que temos um modelo válido, mas não forçar gpt-4.1
+  if (!model) model = 'gpt-4.1';
   
-  // Opções padrão
+  // Adicionar mensagem do usuário ao histórico com timestamp e arquivo anexado (se existir)
+  const userTimestamp = new Date().toISOString();
+  const attachedFile = options.attachedFile || null;
+  
+  // Se for a primeira mensagem, adicionar uma mensagem do sistema sobre o modelo
+  const isFirstMessage = conversation.getHistory().filter(msg => msg.role === 'user').length === 0;
+  if (isFirstMessage) {
+    // Adicionar informação sobre o modelo sendo usado (remove qualquer mensagem existente)
+    conversation.getHistory().forEach((msg, index) => {
+      if (msg.role === 'system' && msg.content.includes('Estou usando o modelo')) {
+        conversation.getHistory().splice(index, 1);
+      }
+    });
+    
+    // Adicionar a mensagem de identificação do modelo real ao histórico
+    const modelName = AVAILABLE_MODELS.find(m => m.id === model)?.name || model;
+    conversation.addMessage('system', `Estou usando o modelo ${modelName} (${model}) para esta conversa.`);
+  }
+  
+  conversation.addMessage('user', message, userTimestamp, attachedFile);
+  
+  // Opções padrão otimizadas para cada modelo
   const defaultOptions = {
     temperature: 0.7,
-    max_tokens: 1024
+    max_tokens: getMaxTokensForModel(model)
   };
   
   // Mesclar opções padrão com as fornecidas
   const finalOptions = { ...defaultOptions, ...options };
   
   try {
-    console.log(`Sending streaming message to model ${model}...`);
+    // Usar o ID do modelo diretamente
+    let apiModel = model;
     
-    // Construir o objeto de requisição
-    const requestBody = {
-      model: model,
-      messages: conversation.getHistory(),
-      temperature: finalOptions.temperature,
-      max_tokens: finalOptions.max_tokens,
-      stream: true
-    };
+    console.log(`Sending streaming message to model ${model}...`);
+    console.log(`API model ID: ${apiModel}`);
+    
+    // Log do token count aproximado
+    const tokenCount = conversation.getApproximateTokenCount();
+    console.log(`Approximate token count: ${tokenCount} tokens`);
+    
+    // Verificar se precisamos usar um subset do histórico devido ao limite de contexto
+    let messages = conversation.getHistory();
+    const isGpt41 = model.includes('gpt-4.1');
+    const isAnthropicModel = apiModel.includes('claude');
+    const contextLimit = isGpt41 ? 1000000 : (model.includes('gpt-4o') || isAnthropicModel) ? 120000 : 8000;
+    
+    // Se o contexto é grande demais, usar estratégia de compactação inteligente
+    if (tokenCount > contextLimit * 0.8) { // Usar 80% do limite para garantir espaço para resposta
+      console.log(`Context too large (${tokenCount} tokens). Applying smart context management...`);
+      
+      // Manter a primeira mensagem (system prompt) e as últimas X mensagens
+      const systemPrompt = messages.find(msg => msg.role === 'system');
+      const recentMessages = messages.filter(msg => msg.role !== 'system')
+        .slice(-Math.floor(contextLimit / 500)); // número estimado de mensagens que cabem
+        
+      messages = systemPrompt ? [systemPrompt, ...recentMessages] : recentMessages;
+      console.log(`Reduced context to ${messages.length} messages`);
+    }
+    
+    // Construir o objeto de requisição conforme o provedor de API
+    let requestBody;
+    
+    if (isAnthropicModel) {
+      // Formato para API da Anthropic
+      requestBody = {
+        model: apiModel,
+        messages: messages.map(msg => ({
+          role: msg.role === 'assistant' ? 'assistant' : msg.role === 'system' ? 'system' : 'user',
+          content: msg.content
+        })),
+        temperature: finalOptions.temperature,
+        max_tokens: finalOptions.max_tokens,
+        stream: true
+      };
+    } else {
+      // Formato para API da OpenAI
+      requestBody = {
+        model: apiModel,
+        messages: messages,
+        temperature: finalOptions.temperature,
+        max_tokens: finalOptions.max_tokens,
+        stream: true
+      };
+    }
     
     // Adicionar tools se fornecido
     if (finalOptions.tools && finalOptions.tools.length > 0) {
@@ -275,7 +417,8 @@ export const sendMessageWithStreaming = async (conversation, message, model = 'g
     }
     
     console.log('Request configuration:', {
-      model: model,
+      displayModel: model,
+      apiModel: apiModel,
       temperature: finalOptions.temperature,
       max_tokens: finalOptions.max_tokens,
       hasTools: finalOptions.tools && finalOptions.tools.length > 0

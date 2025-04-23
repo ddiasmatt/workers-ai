@@ -1,6 +1,5 @@
-import React, { useState, useContext, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { AssistantsContext } from '../contexts/AssistantsContext';
+import React, { useState, useRef, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import {
@@ -14,15 +13,10 @@ import {
   Select,
   MenuItem,
   FormHelperText,
-  Chip,
-  OutlinedInput,
   Checkbox,
   ListItemText,
   CircularProgress,
-  Alert,
   Stack,
-  ListSubheader,
-  Tooltip,
   IconButton,
   List,
   ListItem,
@@ -32,7 +26,8 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
-  Modal
+  ListSubheader,
+  OutlinedInput
 } from '@mui/material';
 import AttachFileIcon from '@mui/icons-material/AttachFile';
 import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
@@ -41,24 +36,52 @@ import TableChartIcon from '@mui/icons-material/TableChart';
 import DeleteIcon from '@mui/icons-material/Delete';
 import OpenInFullIcon from '@mui/icons-material/OpenInFull';
 import CloseIcon from '@mui/icons-material/Close';
-import MarkdownIcon from '@mui/icons-material/Code';
-import { uploadFile } from '../services/openai';
+import { Code } from '@mui/icons-material';
+const MarkdownIcon = Code;
+// Função de simulação de upload de arquivo - retorna um ID de arquivo fictício
+const uploadFile = async (file) => {
+  // Simular atraso de rede
+  await new Promise(resolve => setTimeout(resolve, 1000));
+  
+  // Retornar um ID de arquivo fictício baseado no timestamp e nome do arquivo
+  return {
+    id: `file_${Date.now()}_${file.name.replace(/[^a-z0-9]/gi, '_').toLowerCase()}`,
+    name: file.name,
+    type: file.type
+  };
+};
 
 // Ferramentas disponíveis para assistentes
 const AVAILABLE_TOOLS = [
   { id: 'code_interpreter', name: 'Code Interpreter', description: 'Executa código Python para análise de dados e programação' },
   { id: 'file_search', name: 'File Search', description: 'Consulta documentos e arquivos enviados para o assistente' },
   { id: 'function', name: 'Function Calling', description: 'Permite que o assistente chame APIs e funções externas' },
+  { id: 'web_search', name: 'Web Search', description: 'Permite que o assistente pesquise informações atualizadas na internet' },
+  { id: 'web_browsing', name: 'Web Browsing', description: 'Permite que o assistente navegue em páginas da web' },
+  { id: 'vision', name: 'Vision', description: 'Permite que o assistente analise imagens anexadas' },
 ];
 
 const CreateAssistant = () => {
   const navigate = useNavigate();
-  const { createAssistant, isLoading, GPT_MODELS } = useContext(AssistantsContext);
+  const [searchParams] = useSearchParams();
+  const editPresetId = searchParams.get('edit');
+  const [isLoading] = useState(false);
+  
+  // Modelos GPT disponíveis
+  const GPT_MODELS = [
+    { id: 'gpt-4.1', name: 'GPT-4.1 🔥', description: 'Nova geração com 1M+ tokens de contexto', contextWindow: 1047576, maxOutputTokens: 32768 },
+    { id: 'gpt-4o', name: 'GPT-4o', description: 'Última versão GPT-4 otimizada', contextWindow: 128000, maxOutputTokens: 4096 },
+    { id: 'gpt-4-turbo', name: 'GPT-4 Turbo', description: 'Versão mais recente da série GPT-4', contextWindow: 128000, maxOutputTokens: 4096 },
+    { id: 'gpt-4', name: 'GPT-4', description: 'Versão estável GPT-4', contextWindow: 8192, maxOutputTokens: 4096 },
+    { id: 'claude-3-7-sonnet-20250219', name: 'Claude 3.7 Sonnet', description: 'Modelo Claude com alta capacidade', contextWindow: 200000, maxOutputTokens: 4096 },
+    { id: 'claude-3-opus-20240229', name: 'Claude 3 Opus', description: 'Versão premium do Claude com alta capacidade', contextWindow: 200000, maxOutputTokens: 4096 },
+    { id: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo', description: 'Versão rápida e econômica', contextWindow: 16385, maxOutputTokens: 4096 }
+  ];
   
   const [formData, setFormData] = useState({
     name: '',
     instructions: 'Você pode usar Markdown para formatar suas respostas (negrito, itálico, títulos, listas, código, etc.). Use essa funcionalidade para organizar suas respostas de forma clara e atraente.\n\n',
-    model: 'gpt-4o',
+    model: 'gpt-4.1',
     tools: [],
     files: []
   });
@@ -66,7 +89,8 @@ const CreateAssistant = () => {
   // Agrupar modelos por categoria
   const groupedModels = {
     gpt4Series: GPT_MODELS.filter(model => model.id.startsWith('gpt-4')),
-    gpt35Series: GPT_MODELS.filter(model => model.id.startsWith('gpt-3.5')),
+    claudeSeries: GPT_MODELS.filter(model => model.id.includes('claude')),
+    gpt35Series: GPT_MODELS.filter(model => model.id.startsWith('gpt-3.5'))
   };
   
   const [errors, setErrors] = useState({});
@@ -81,6 +105,33 @@ const CreateAssistant = () => {
   const handleCloseInstructionsModal = () => setInstructionsModalOpen(false);
   const togglePreviewMode = () => setPreviewMode(!previewMode);
   
+  // Efeito para carregar o preset a ser editado
+  useEffect(() => {
+    if (editPresetId) {
+      try {
+        // Carregar presets salvos
+        const savedPresets = localStorage.getItem('chat_presets');
+        if (savedPresets) {
+          const presets = JSON.parse(savedPresets);
+          const presetToEdit = presets.find(p => p.id === editPresetId);
+          
+          if (presetToEdit) {
+            // Preencher formulário com dados do preset
+            setFormData({
+              name: presetToEdit.name || '',
+              instructions: presetToEdit.systemPrompt || '',
+              model: 'gpt-4.1', // Force GPT-4.1 as the only model
+              tools: presetToEdit.tools || [],
+              files: presetToEdit.attachedFiles || []
+            });
+          }
+        }
+      } catch (error) {
+        console.error('Erro ao carregar preset para edição:', error);
+      }
+    }
+  }, [editPresetId]);
+
   // Validar formulário antes de enviar
   const validateForm = () => {
     const newErrors = {};
@@ -184,24 +235,79 @@ const CreateAssistant = () => {
         console.log('Files detected, adding file_search tool automatically');
         updatedTools.push('file_search');
       }
-      
-      // Preparar os dados para envio, incluindo IDs de arquivos
-      const assistantData = {
-        ...formData,
-        tools: updatedTools,
-        file_ids: formData.files.map(file => file.id)
-      };
-      
-      console.log('Creating assistant data with files:', assistantData);
-      createAssistant(assistantData);
-      setTimeout(() => navigate('/'), 1500); // Redireciona após criar
+
+      if (editPresetId) {
+        // Estamos editando um preset existente
+        try {
+          // Obter presets atuais
+          const savedPresets = localStorage.getItem('chat_presets');
+          if (savedPresets) {
+            const presets = JSON.parse(savedPresets);
+            
+            // Encontrar o índice do preset a ser atualizado
+            const presetIndex = presets.findIndex(p => p.id === editPresetId);
+            
+            if (presetIndex !== -1) {
+              // Atualizar o preset com os novos dados
+              const updatedPresets = [...presets];
+              updatedPresets[presetIndex] = {
+                ...updatedPresets[presetIndex],
+                name: formData.name,
+                systemPrompt: formData.instructions,
+                model: formData.model,
+                tools: updatedTools,
+                attachedFiles: formData.files,
+                lastUpdated: new Date().toISOString()
+              };
+              
+              // Salvar no localStorage
+              localStorage.setItem('chat_presets', JSON.stringify(updatedPresets));
+              console.log('Worker atualizado com sucesso:', formData.name);
+              
+              // Redirecionar para a página inicial
+              navigate('/');
+            }
+          }
+        } catch (error) {
+          console.error('Erro ao atualizar worker:', error);
+        }
+      } else {
+        // Criar um novo preset (worker) no localStorage
+        const newPreset = {
+          id: `preset_${Date.now()}`,
+          name: formData.name,
+          systemPrompt: formData.instructions,
+          model: formData.model,
+          tools: updatedTools,
+          attachedFiles: formData.files,
+          createdAt: new Date().toISOString()
+        };
+        
+        try {
+          // Obter presets existentes
+          const savedPresets = localStorage.getItem('chat_presets');
+          const presets = savedPresets ? JSON.parse(savedPresets) : [];
+          
+          // Adicionar novo preset
+          const updatedPresets = [...presets, newPreset];
+          
+          // Salvar no localStorage
+          localStorage.setItem('chat_presets', JSON.stringify(updatedPresets));
+          console.log('Novo worker criado com sucesso:', newPreset.name);
+          
+          // Redirecionar para a página inicial
+          navigate('/');
+        } catch (error) {
+          console.error('Erro ao criar novo worker:', error);
+        }
+      }
     }
   };
 
   return (
     <Box>
       <Typography variant="h4" gutterBottom>
-        Criar Novo Assistente
+        {editPresetId ? 'Editar Worker' : 'Criar Novo Worker'}
       </Typography>
       
       <Paper sx={{ p: 3, mt: 3 }}>
@@ -236,7 +342,20 @@ const CreateAssistant = () => {
                     <Box>
                       <Typography variant="subtitle1">{model.name}</Typography>
                       <Typography variant="caption" color="text.secondary">
-                        {model.description}
+                        {model.description} ({(model.contextWindow/1000).toLocaleString()}K tokens contexto)
+                      </Typography>
+                    </Box>
+                  </MenuItem>
+                ))}
+                
+                {/* Claude Series */}
+                <ListSubheader>Modelos Claude</ListSubheader>
+                {groupedModels.claudeSeries.map((model) => (
+                  <MenuItem key={model.id} value={model.id}>
+                    <Box>
+                      <Typography variant="subtitle1">{model.name}</Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {model.description} ({(model.contextWindow/1000).toLocaleString()}K tokens contexto)
                       </Typography>
                     </Box>
                   </MenuItem>
@@ -249,13 +368,15 @@ const CreateAssistant = () => {
                     <Box>
                       <Typography variant="subtitle1">{model.name}</Typography>
                       <Typography variant="caption" color="text.secondary">
-                        {model.description}
+                        {model.description} ({(model.contextWindow/1000).toLocaleString()}K tokens contexto)
                       </Typography>
                     </Box>
                   </MenuItem>
                 ))}
               </Select>
-              {errors.model && <FormHelperText>{errors.model}</FormHelperText>}
+              <FormHelperText>
+                Escolha o modelo de IA para este assistente
+              </FormHelperText>
             </FormControl>
             
             {/* Instruções */}
@@ -274,23 +395,13 @@ const CreateAssistant = () => {
                 InputProps={{
                   endAdornment: (
                     <Box position="absolute" right={8} top={8} display="flex" gap={1}>
-                      <Tooltip title="Visualizar/editar instruções em tela cheia">
-                        <IconButton
-                          onClick={handleOpenInstructionsModal}
-                          size="small"
-                          sx={{ bgcolor: 'rgba(0,0,0,0.04)' }}
-                        >
-                          <OpenInFullIcon fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
-                      <Tooltip title="Sintaxe Markdown é suportada">
-                        <IconButton
-                          size="small"
-                          sx={{ bgcolor: 'rgba(0,0,0,0.04)' }}
-                        >
-                          <MarkdownIcon fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
+                      <IconButton
+                        onClick={handleOpenInstructionsModal}
+                        size="small"
+                        sx={{ bgcolor: 'rgba(0,0,0,0.04)' }}
+                      >
+                        <OpenInFullIcon fontSize="small" />
+                      </IconButton>
                     </Box>
                   )
                 }}
@@ -311,7 +422,7 @@ const CreateAssistant = () => {
                   <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
                     {selected.map((value) => {
                       const tool = AVAILABLE_TOOLS.find(t => t.id === value);
-                      return <Chip key={value} label={tool ? tool.name : value} />
+                      return tool ? tool.name : value
                     })}
                   </Box>
                 )}
@@ -337,16 +448,14 @@ const CreateAssistant = () => {
                 <Typography variant="subtitle1" gutterBottom>
                   Arquivos
                 </Typography>
-                <Tooltip title="Adicionar arquivo (PDF, CSV, TXT, Markdown)">
-                  <IconButton 
-                    size="small" 
-                    onClick={handleOpenFileSelector}
-                    disabled={uploadingFile}
-                    sx={{ ml: 1 }}
-                  >
-                    <AttachFileIcon fontSize="small" />
-                  </IconButton>
-                </Tooltip>
+                <IconButton 
+                  size="small" 
+                  onClick={handleOpenFileSelector}
+                  disabled={uploadingFile}
+                  sx={{ ml: 1 }}
+                >
+                  <AttachFileIcon fontSize="small" />
+                </IconButton>
               </Box>
               
               {uploadStatus && (
@@ -416,7 +525,9 @@ const CreateAssistant = () => {
                 disabled={isLoading || uploadingFile}
                 startIcon={isLoading ? <CircularProgress size={20} /> : null}
               >
-                {isLoading ? 'Criando...' : 'Criar Assistente'}
+                {isLoading 
+                  ? (editPresetId ? 'Salvando...' : 'Criando...') 
+                  : (editPresetId ? 'Salvar Alterações' : 'Criar Worker')}
               </Button>
             </Box>
           </Stack>
